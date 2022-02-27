@@ -7,10 +7,11 @@ name = "pypi"
 numpy = "*"
 pandas = "*"
 matplotlib = "*"
-tensorflow-cpu = "*"
 jupyter = "*"
 pydot = "*"
 scikit-learn = "*"
+tensorflow = "*"
+keras = "*"
 
 [dev-packages]
 

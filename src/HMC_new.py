@@ -1,6 +1,7 @@
 import tensorflow as tf
 from tensorflow import keras
 from typing import NamedTuple, Any
+from operator import mul
 
 tf.random.set_seed(1234)
 
@@ -15,7 +16,7 @@ class HMCState(NamedTuple):
 
 
 class HMC(keras.Model):
-    def __init__(self, model: keras.Layer,
+    def __init__(self, model: keras.Model,
                  L: int,
                  epsilon: float,
                  batch_size: int):
@@ -24,7 +25,8 @@ class HMC(keras.Model):
         self.L = L
         self.epsilon = epsilon
         self.batch_size = batch_size
-        self.param_num = model.trainable_variables.size
+        self.param_num = sum([tf.size(var) for var in model.trainable_variables])
+        self.param_shapes = [var.shape for var in model.trainable_variables]
         self.log_gamma = tf.Variable(tf.random.normal((1,)))
         self.log_lambda = tf.Variable(tf.random.normal((1,)))
         self.loss = keras.losses.MeanSquaredError()
@@ -46,8 +48,23 @@ class HMC(keras.Model):
         dw = tf.exp(state.log_gamma) / 2 * grad + tf.exp(state.log_lambda) * tf.sign(w)
         return dw
 
+    def get_model_params(self):
+        params = self.model.trainable_variables
+        params = [tf.reshape(param, [-1]) for param in params]
+        return tf.concat(params, 0)
+
+    def set_model_params(self, params):
+        shaped_params = []
+        idx = 0
+        for shape in self.param_shapes:
+            size = tf.reduce_prod(shape)
+            param = params[idx:(idx+size)]
+            param = tf.reshape(param, shape)
+            shaped_params.append(param)
+        self.model.trainable_variables.assign(shaped_params)
+
     def get_hyper_grad(self, inputs, state: HMCState):
-        self.model.trainable_variables.assign(state.position)
+        self.set_model_params(state.position)
         loss = self.get_loss(inputs)
         dlog_gamma = tf.exp(state.log_gamma) * (loss / 2 + 1) - (self.batch_size / 2 + 1)
         dlog_lambda = tf.exp(state.log_lambda) * (tf.reduce_sum(tf.abs(state.position)) + 1) - (self.param_num + 1)
@@ -80,7 +97,7 @@ class HMC(keras.Model):
         pass
 
     def state(self, momentum: tf.Tensor, log_gamma_p: tf.Tensor, log_lambda_p: tf.Tensor):
-        return HMCState(self.model.trainable_variables.copy(),
+        return HMCState(self.get_model_params(),
                         self.log_gamma,
                         self.log_lambda,
                         momentum,
@@ -88,7 +105,7 @@ class HMC(keras.Model):
                         log_lambda_p)
 
     def update_state(self, state: HMCState):
-        self.model.trainable_variables.assign(state.position)
+        self.set_model_params(state.position)
         self.log_lambda = state.log_lambda
         self.log_gamma = state.log_gamma
 
@@ -101,12 +118,12 @@ class HMC(keras.Model):
     def get_loss_and_grad(self, inputs, state=None):
         batch, targets = inputs
         if state is not None:
-            self.model.trainable_variables.assign(state.position)
+            self.set_model_params(state.position)
         with tf.GradientTape() as tape:
             tape.watch(batch)
             pred = self.model(batch)
             loss = self.loss(pred, targets)
-        grad = tape.gradient(loss, self.model.trainable_variables)
+        grad = tape.gradient(loss, self.get_model_params())
         return loss, grad
 
     def potential_energy(self, inputs, state: HMCState):
@@ -125,7 +142,7 @@ class HMC(keras.Model):
 
     def leap_frog(self, inputs, state: HMCState):
 
-        self.model.trainable_variables.assign(state.position)
+        self.set_model_params(state.position)
         current_state = state
         for i in range(self.L):
             loss, grad = self.get_loss_and_grad(inputs, current_state)

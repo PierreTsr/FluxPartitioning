@@ -2,8 +2,6 @@ import tensorflow as tf
 from tensorflow import keras
 from typing import NamedTuple, Any
 
-tf.random.set_seed(1234)
-
 
 class HMCState(NamedTuple):
     """

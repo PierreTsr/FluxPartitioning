@@ -12,6 +12,7 @@ pydot = "*"
 scikit-learn = "*"
 tensorflow = "*"
 keras = "*"
+nbconvert = "*"
 
 [dev-packages]
 

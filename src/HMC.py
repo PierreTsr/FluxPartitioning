@@ -39,7 +39,7 @@ class HMC(keras.Model):
         self.batch_size = tf.constant(batch_size)
         self.param_num = tf.constant(sum([tf.size(var) for var in model.trainable_variables]))
         self.param_shapes = [var.shape for var in model.trainable_variables]
-        self.log_gamma = tf.Variable(tf.random.normal((1,)))
+        self.log_gamma = tf.Variable(tf.random.normal((1,)) + 4)
         self.log_lambda = tf.Variable(tf.random.normal((1,)))
         self.loss = model.loss
 
@@ -58,35 +58,6 @@ class HMC(keras.Model):
         p = tf.exp(hamiltonian_init - hamiltonian_final)
         p = tf.minimum(p, 1.0)
         return p
-
-    @staticmethod
-    def kinetic_energy(state: HMCState):
-        """
-        Return the kinetic energy of a given state.
-
-        :param state: current state of the walk.
-        :type state: HMCState
-        :return: kinetic energy
-        :rtype: float
-        """
-        k = (tf.reduce_sum(state.momentum ** 2) + state.log_gamma_p ** 2 + state.log_lambda_p ** 2) / 2.0
-        return k
-
-    @staticmethod
-    def get_hmc_grad(grad, state: HMCState):
-        """
-        Update the parameters' gradient for HMC setup.
-
-        :param grad: gradient of the parameters as returned by TF.
-        :type grad: tf.Tensor
-        :param state: current state of the walk.
-        :type state: HMCState
-        :return: updated gradient.
-        :rtype: tf.Tensor
-        """
-        w = state.position
-        dw = tf.exp(state.log_gamma) / 2.0 * grad + tf.exp(state.log_lambda) * tf.sign(w)
-        return dw
 
     def get_model_params(self):
         """
@@ -118,55 +89,74 @@ class HMC(keras.Model):
         for var, param in zip(self.model.trainable_variables, shaped_params):
             var.assign(param)
 
-    def get_hyper_grad(self, inputs, state: HMCState):
+    def get_loss(self, inputs):
         """
-        Compute the gradient of λ and γ.
+        Compute sub-model loss.
 
         :param inputs: training data, tuple (inputs, targets).
         :type inputs: Tuple
+        :return: loss value
+        :rtype: float
+        """
+        batch, targets = inputs
+        pred = self.model(batch)
+        loss = self.loss(pred, targets)
+        return loss
+
+    def get_loss_and_grad(self, inputs, state=None):
+        """
+        Compute sub-model loss and gradient.
+
+        :param inputs: training data, tuple (inputs, targets).
+        :type inputs: Tuple
+        :param state: current state of the model.
+        :type state: HMCState
+        :return: loss and gradient of the given model (loss, grad); the gradient is reshaped as a one-dimensional Tensor.
+        :rtype: (float, tf.Tensor)
+        """
+        batch, targets = inputs
+        if state is not None:
+            self.set_model_params(state.position)
+        with tf.GradientTape() as tape:
+            tape.watch(batch)
+            pred = self.model(batch)
+            loss = self.loss(pred, targets)
+        grad = tape.gradient(loss, self.model.trainable_variables)
+        grad = tf.concat([tf.reshape(param, [-1]) for param in grad], 0)
+        return loss, grad
+
+    def get_hyper_grad(self, loss, state: HMCState):
+        """
+        Compute the gradient of λ and γ.
+
+        :param loss: the loss value in the current state.
+        :type loss: float
         :param state: current state of the walk.
         :type state: HMCState
         :return: gradient of γ, gradient of λ.
         :rtype: (float, float)
         """
-        self.set_model_params(state.position)
-        loss = self.get_loss(inputs)
         dlog_gamma = tf.exp(state.log_gamma) * (loss / 2.0 + 1.0) \
                      - (tf.cast(self.batch_size, tf.float32) / 2.0 + 1.0)
         dlog_lambda = tf.exp(state.log_lambda) * (tf.reduce_sum(tf.abs(state.position)) + 1.0) \
                       - (tf.cast(self.param_num, tf.float32) + 1.0)
         return dlog_gamma, dlog_lambda
 
-    @tf.function
-    def call(self, inputs):
+    @staticmethod
+    def get_hmc_grad(grad, state: HMCState):
         """
-        Run one step of HMC walk with the given model.
+        Update the parameters' gradient for HMC setup.
 
-        :param inputs: training data, tuple (inputs, targets).
-        :type inputs: Tuple
-        :return: Final state of the model and logging data (Final State, Loss value, probability of new state, is new state accepted, Hamiltonian value).
-        :rtype: HMCState, float, float, bool, float
+        :param grad: gradient of the parameters as returned by TF.
+        :type grad: tf.Tensor
+        :param state: current state of the walk.
+        :type state: HMCState
+        :return: updated gradient.
+        :rtype: tf.Tensor
         """
-        momentum = tf.random.normal((self.param_num,))
-        log_gamma_p = tf.random.normal((1,))
-        log_lambda_p = tf.random.normal((1,))
-        init_state = self.state(momentum, log_gamma_p, log_lambda_p)
-
-        hamiltonian_init, loss_initial = self.hamiltonian(inputs, init_state)
-        new_state = self.leap_frog(inputs, init_state)
-        hamiltonian_final, loss_final = self.hamiltonian(inputs, new_state)
-
-        p_new_state = self.probability(hamiltonian_init, hamiltonian_final)
-        p = tf.random.uniform((1,), 0, 1)
-
-        if p < p_new_state:
-            final_state = new_state
-            self.update_state(final_state)
-            return final_state, loss_final, p_new_state, True, hamiltonian_final
-        else:
-            final_state = init_state
-            self.update_state(init_state)
-            return final_state, loss_initial, p_new_state, False, hamiltonian_init
+        w = state.position
+        dw = tf.exp(state.log_gamma) / 2.0 * grad + tf.exp(state.log_lambda) * tf.sign(w)
+        return dw
 
     def get_config(self):
         # TODO
@@ -205,79 +195,51 @@ class HMC(keras.Model):
         self.log_lambda = state.log_lambda
         self.log_gamma = state.log_gamma
 
-    def get_loss(self, inputs):
+    @staticmethod
+    def kinetic_energy(state: HMCState):
         """
-        Compute sub-model loss.
+        Return the kinetic energy of a given state.
 
-        :param inputs: training data, tuple (inputs, targets).
-        :type inputs: Tuple
-        :return: loss value
+        :param state: current state of the walk.
+        :type state: HMCState
+        :return: kinetic energy
         :rtype: float
         """
-        batch, targets = inputs
-        pred = self.model(batch)
-        loss = self.loss(pred, targets)
-        loss += tf.reduce_sum(self.model.losses)
-        return loss
+        k = (tf.reduce_sum(state.momentum ** 2) + state.log_gamma_p ** 2 + state.log_lambda_p ** 2) / 2.0
+        return k
 
-    def get_loss_and_grad(self, inputs, state=None):
-        """
-        Compute sub-model loss and gradient.
-
-        :param inputs: training data, tuple (inputs, targets).
-        :type inputs: Tuple
-        :param state: current state of the model.
-        :type state: HMCState
-        :return: loss and gradient of the given model (loss, grad); the gradient is reshaped as a one-dimensional Tensor.
-        :rtype: (float, tf.Tensor)
-        """
-        batch, targets = inputs
-        if state is not None:
-            self.set_model_params(state.position)
-        with tf.GradientTape() as tape:
-            tape.watch(batch)
-            pred = self.model(batch)
-            loss = self.loss(pred, targets)
-            loss += tf.reduce_sum(self.model.losses)
-        grad = tape.gradient(loss, self.model.trainable_variables)
-        grad = tf.concat([tf.reshape(param, [-1]) for param in grad], 0)
-        return loss, grad
-
-    def potential_energy(self, inputs, state: HMCState):
+    def potential_energy(self, loss, state: HMCState):
         """
         Compute the potential energy of the system for a given state.
 
-        :param inputs: training data, tuple (inputs, targets).
-        :type inputs: Tuple
+        :param loss: the loss value in the current state.
+        :type loss: float
         :param state: current state of the walk.
         :type state: HMCState
         :return: potential energy.
         :rtype: float
         """
         w = state.position
-        loss = self.get_loss(inputs)
         u = tf.exp(state.log_gamma) * (loss / 2.0 + 1.0) \
             + tf.exp(state.log_lambda) * (tf.reduce_sum(tf.abs(w)) + 1.0) \
             - (tf.cast(self.batch_size, tf.float32) / 2.0 + 1.0) * state.log_gamma \
             - (tf.cast(self.param_num, tf.float32) + 1.0) * state.log_lambda
-        return u, loss
+        return u
 
-    def hamiltonian(self, inputs, state: HMCState):
+    def hamiltonian(self, loss, state: HMCState):
         """
         Compute the Hamiltonian of the walk for a given state.
 
-        Simply sums the potential and kinetic energies. It also returns the loss of the model to avoid redundant computation.
-
-        :param inputs: training data, tuple (inputs, targets).
-        :type inputs: Tuple
+        :param loss: the loss value in the current state.
+        :type loss: float
         :param state: current state of the walk.
         :type state: HMCState
         :return: current hamiltonian value, loss value
         :rtype: (float, float)
         """
         k = HMC.kinetic_energy(state)
-        u, loss = self.potential_energy(inputs, state)
-        return k + u, loss
+        u = self.potential_energy(loss, state)
+        return k + u
 
     def leap_frog(self, inputs, state: HMCState):
         """
@@ -291,12 +253,11 @@ class HMC(keras.Model):
         :rtype: HMCState
         """
 
-        self.set_model_params(state.position)
         current_state = state
         for i in range(self.L):
             loss, grad = self.get_loss_and_grad(inputs, current_state)
             grad = HMC.get_hmc_grad(grad, current_state)
-            dlog_gamma, dlog_lambda = self.get_hyper_grad(inputs, current_state)
+            dlog_gamma, dlog_lambda = self.get_hyper_grad(loss, current_state)
 
             log_gamma_p_new = current_state.log_gamma_p - self.epsilon / 2.0 * dlog_gamma
             log_lambda_p_new = current_state.log_lambda_p - self.epsilon / 2.0 * dlog_lambda
@@ -315,7 +276,7 @@ class HMC(keras.Model):
 
             loss, grad = self.get_loss_and_grad(inputs, half_state)
             grad = HMC.get_hmc_grad(grad, half_state)
-            dlog_gamma, dlog_lambda = self.get_hyper_grad(inputs, half_state)
+            dlog_gamma, dlog_lambda = self.get_hyper_grad(loss, half_state)
 
             log_gamma_p_new = half_state.log_gamma_p - self.epsilon / 2.0 * dlog_gamma
             log_lambda_p_new = half_state.log_lambda_p - self.epsilon / 2.0 * dlog_lambda
@@ -328,3 +289,40 @@ class HMC(keras.Model):
                                      log_gamma_p_new,
                                      log_lambda_p_new)
         return current_state
+
+    @tf.function
+    def call(self, inputs):
+        """
+        Run one step of HMC walk with the given model.
+
+        :param inputs: training data, tuple (inputs, targets).
+        :type inputs: Tuple
+        :return: Final state of the model and logging data (Final State, Loss value, probability of new state, is new state accepted, Hamiltonian value).
+        :rtype: HMCState, float, float, bool, float
+        """
+        momentum = tf.random.normal((self.param_num,))
+        log_gamma_p = tf.random.normal((1,))
+        log_lambda_p = tf.random.normal((1,))
+        init_state = self.state(momentum, log_gamma_p, log_lambda_p)
+
+        self.set_model_params(init_state.position)
+        loss_initial = self.get_loss(inputs)
+        hamiltonian_init = self.hamiltonian(loss_initial, init_state)
+
+        new_state = self.leap_frog(inputs, init_state)
+
+        self.set_model_params(new_state.position)
+        loss_final = self.get_loss(inputs)
+        hamiltonian_final = self.hamiltonian(loss_final, new_state)
+
+        p_new_state = self.probability(hamiltonian_init, hamiltonian_final)
+        p = tf.random.uniform((1,), 0, 1)
+
+        if p < p_new_state:
+            final_state = new_state
+            self.update_state(final_state)
+            return final_state, loss_final, p_new_state, True, hamiltonian_final
+        else:
+            final_state = init_state
+            self.update_state(init_state)
+            return final_state, loss_initial, p_new_state, False, hamiltonian_init

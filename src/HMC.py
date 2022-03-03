@@ -101,6 +101,7 @@ class HMC(keras.Model):
             param = params[idx:(idx + size)]
             param = tf.reshape(param, shape)
             shaped_params.append(param)
+            idx += size
         for var, param in zip(self.model.trainable_variables, shaped_params):
             var.assign(param)
 

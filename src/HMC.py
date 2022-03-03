@@ -7,9 +7,9 @@ class HMCState(NamedTuple):
     """
     Basic NamedTuple extension to represent a given state of the HMC walk.
     """
-    position: tf.Variable
-    log_gamma: tf.Variable
-    log_lambda: tf.Variable
+    position: tf.Tensor
+    log_gamma: tf.Tensor
+    log_lambda: tf.Tensor
     momentum: tf.Tensor
     log_gamma_p: tf.Tensor
     log_lambda_p: tf.Tensor
@@ -41,18 +41,18 @@ class HMC(keras.Model):
         self.batch_size = tf.constant(batch_size)
         self.param_num = tf.constant(sum([tf.size(var) for var in model.trainable_variables]))
         self.param_shapes = [var.shape for var in model.trainable_variables]
-        self.log_gamma = tf.Variable(tf.random.normal(()) + 4, shape=())
-        self.log_lambda = tf.Variable(tf.random.normal(()), shape=())
+        self.log_gamma = tf.Variable(tf.random.normal((1,)) + 4, shape=(1,))
+        self.log_lambda = tf.Variable(tf.random.normal((1,)), shape=(1,))
         self.loss = model.loss
 
     def init_parameters(self, inputs):
         loss = self.get_loss(inputs)
-        self.log_gamma.assign(tf.math.log(tf.cast(self.batch_size, dtype=tf.float32) / loss))
-        if self.log_gamma > 6:
-            self.log_gamma.assign(6)
+        self.log_gamma[0].assign(tf.math.log(tf.cast(self.batch_size, dtype=tf.float32) / loss))
+        if self.log_gamma > 6.0:
+            self.log_gamma[0].assign(6)
             # self.epsilon_min = tf.constant(5e-4, dtype=tf.float32)
             # self.epsilon_max = tf.constant(5e-4, dtype=tf.float32)
-        self.log_lambda.assign(tf.random.normal(()))
+        self.log_lambda.assign(tf.random.normal((1,)))
 
     def epsilon(self, step, n_iter):
         return self.epsilon_max * tf.exp(- tf.cast(step, tf.float32) / tf.cast(n_iter, tf.float32)
@@ -64,11 +64,11 @@ class HMC(keras.Model):
         Return the probability to accept a step.
 
         :param hamiltonian_init: initial Hamiltonian value
-        :type hamiltonian_init: float
+        :type hamiltonian_init: tf.Tensor
         :param hamiltonian_final: final Hamiltonian value
-        :type hamiltonian_final: float
+        :type hamiltonian_final: tf.Tensor
         :return: probability to accept the new state
-        :rtype: float
+        :rtype: tf.Tensor
         """
         p = tf.exp(hamiltonian_init - hamiltonian_final)
         p = tf.minimum(p, 1.0)
@@ -109,9 +109,9 @@ class HMC(keras.Model):
         Compute sub-model loss.
 
         :param inputs: training data, tuple (inputs, targets).
-        :type inputs: tuple
+        :type inputs: (tf.Tensor, tf.Tensor)
         :return: loss value
-        :rtype: float
+        :rtype: tf.Tensor
         """
         batch, targets = inputs
         pred = self.model(batch)
@@ -123,11 +123,11 @@ class HMC(keras.Model):
         Compute sub-model loss and gradient.
 
         :param inputs: training data, tuple (inputs, targets).
-        :type inputs: tuple
+        :type inputs: (tf.Tensor, tf.Tensor)
         :param state: current state of the model.
         :type state: HMCState
         :return: loss and gradient of the given model (loss, grad); the gradient is reshaped as a one-dimensional Tensor.
-        :rtype: (float, tf.Tensor)
+        :rtype: (tf.Tensor, tf.Tensor)
         """
         batch, targets = inputs
         if state is not None:
@@ -145,11 +145,11 @@ class HMC(keras.Model):
         Compute the gradient of λ and γ.
 
         :param loss: the loss value in the current state.
-        :type loss: float
+        :type loss: tf.Tensor
         :param state: current state of the walk.
         :type state: HMCState
         :return: gradient of γ, gradient of λ.
-        :rtype: (float, float)
+        :rtype: (tf.Tensor, tf.Tensor)
         """
         dlog_gamma = tf.exp(state.log_gamma) * (loss / 2.0 + 1.0) \
                      - (tf.cast(self.batch_size, tf.float32) / 2.0 + 1.0)
@@ -184,9 +184,9 @@ class HMC(keras.Model):
         :param momentum: momentum value.
         :type momentum: tf.Tensor
         :param log_gamma_p: log(γ) value for the momentum.
-        :type log_gamma_p: float
+        :type log_gamma_p: tf.Tensor
         :param log_lambda_p: log(λ) value for the momentum.
-        :type log_lambda_p: float
+        :type log_lambda_p: tf.Tensor
         :return: the current state of the model
         :rtype: HMCState
         """
@@ -207,8 +207,8 @@ class HMC(keras.Model):
         :rtype: None
         """
         self.set_model_params(state.position)
-        self.log_lambda = state.log_lambda
-        self.log_gamma = state.log_gamma
+        self.log_lambda.assign(state.log_lambda)
+        self.log_gamma.assign(state.log_gamma)
 
     @staticmethod
     def kinetic_energy(state: HMCState):
@@ -218,7 +218,7 @@ class HMC(keras.Model):
         :param state: current state of the walk.
         :type state: HMCState
         :return: kinetic energy
-        :rtype: float
+        :rtype: tf.Tensor
         """
         k = (tf.reduce_sum(state.momentum ** 2) + state.log_gamma_p ** 2 + state.log_lambda_p ** 2) / 2.0
         return k
@@ -228,11 +228,11 @@ class HMC(keras.Model):
         Compute the potential energy of the system for a given state.
 
         :param loss: the loss value in the current state.
-        :type loss: float
+        :type loss: tf.Tensor
         :param state: current state of the walk.
         :type state: HMCState
         :return: potential energy.
-        :rtype: float
+        :rtype: tf.Tensor
         """
         w = state.position
         u = tf.exp(state.log_gamma) * (loss / 2.0 + 1.0) \
@@ -246,11 +246,11 @@ class HMC(keras.Model):
         Compute the Hamiltonian of the walk for a given state.
 
         :param loss: the loss value in the current state.
-        :type loss: float
+        :type loss: tf.Tensor
         :param state: current state of the walk.
         :type state: HMCState
         :return: current hamiltonian value, loss value
-        :rtype: (float, float)
+        :rtype: tf.Tensor
         """
         k = HMC.kinetic_energy(state)
         u = self.potential_energy(loss, state)
@@ -261,11 +261,11 @@ class HMC(keras.Model):
         Run `L` steps of the leapfrog procedure to update the Hamiltonian.
 
         :param inputs: training data, tuple (inputs, targets).
-        :type inputs: tuple
+        :type inputs: (tf.Tensor, tf.Tensor)
         :param state: initial state of the walk.
         :type state: HMCState
         :param epsilon: epsilon value for the leapfrog process.
-        :type epsilon: float
+        :type epsilon: tf.Tensor
         :return: final state of the walk.
         :rtype: HMCState
         """
@@ -313,13 +313,13 @@ class HMC(keras.Model):
         Run one step of HMC walk with the given model.
 
         :param inputs: training data, tuple (inputs, targets).
-        :type inputs: tuple
+        :type inputs: (tf.Tensor, tf.Tensor)
         :param step: current step of the walk.
-        :type step: int
+        :type step: tf.Tensor
         :param n_iter: total length of the HMC walk.
-        :type n_iter: int
+        :type n_iter: tf.Tensor
         :return: Final state of the model and logging data (Final State, Loss value, probability of new state, is new state accepted, Hamiltonian value).
-        :rtype: tuple<HMCState, float, float, bool, float>
+        :rtype: (HMCState, tf.Tensor, tf.Tensor, bool, tf.Tensor)
         """
         epsilon = self.epsilon(step, n_iter)
 

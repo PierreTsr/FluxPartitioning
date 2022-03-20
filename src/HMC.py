@@ -7,9 +7,9 @@ class HMCState(NamedTuple):
     """
     Basic NamedTuple extension to represent a given state of the HMC walk.
     """
-    position: tf.Tensor
-    log_gamma: tf.Tensor
-    log_lambda: tf.Tensor
+    position: tf.Variable
+    log_gamma: tf.Variable
+    log_lambda: tf.Variable
     momentum: tf.Tensor
     log_gamma_p: tf.Tensor
     log_lambda_p: tf.Tensor
@@ -49,7 +49,7 @@ class HMC(keras.Model):
         loss = self.get_loss(inputs)
         self.log_gamma[0].assign(tf.math.log(tf.cast(self.batch_size, dtype=tf.float32) / loss))
         if self.log_gamma > 6.0:
-            self.log_gamma[0].assign(6)
+            self.log_gamma[0].assign(6.0)
             # self.epsilon_min = tf.constant(5e-4, dtype=tf.float32)
             # self.epsilon_max = tf.constant(5e-4, dtype=tf.float32)
         self.log_lambda.assign(tf.random.normal((1,)))

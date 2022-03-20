@@ -1,7 +1,6 @@
 import numpy as np
 from scipy.stats import norm
 
-
 def geweke(chain, frac_init=0.1, frac_final=0.5):
     n = chain.shape[0]
     sample_1 = chain[:int(frac_init * n)]
@@ -9,7 +8,7 @@ def geweke(chain, frac_init=0.1, frac_final=0.5):
     m_1 = sample_1.shape[0]
     m_2 = sample_2.shape[0]
     z = (np.mean(sample_1, axis=0) - np.mean(sample_2, axis=0)) / \
-        np.sqrt(np.var(sample_1, axis=0) / m_1 + np.var(sample_2, axis=0) / m_2)
+        np.sqrt(np.var(sample_1, axis=0) + np.var(sample_2, axis=0))
     return z, 2 * (1 - norm.cdf(np.abs(z)))
 
 

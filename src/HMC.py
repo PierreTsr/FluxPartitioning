@@ -1,6 +1,6 @@
 import tensorflow as tf
 from tensorflow import keras
-from typing import NamedTuple
+from typing import NamedTuple, Any
 
 
 class HMCState(NamedTuple):
@@ -20,7 +20,8 @@ class HMC(keras.Model):
                  L: int,
                  epsilon_min: float,
                  epsilon_max: float,
-                 batch_size: int):
+                 batch_size: int,
+                 n_obs: int):
         """
         "Super-Model" class to train a model through HMC random walk.
 
@@ -39,6 +40,7 @@ class HMC(keras.Model):
         self.epsilon_min = tf.constant(epsilon_min, dtype=tf.float32)
         self.epsilon_max = tf.constant(epsilon_max, dtype=tf.float32)
         self.batch_size = tf.constant(batch_size)
+        self.n_observations = tf.constant(n_obs)
         self.param_num = tf.constant(sum([tf.size(var) for var in model.trainable_variables]))
         self.param_shapes = [var.shape for var in model.trainable_variables]
         self.log_gamma = tf.Variable(tf.random.normal((1,)) + 4, shape=(1,))
@@ -47,7 +49,7 @@ class HMC(keras.Model):
 
     def init_parameters(self, inputs):
         loss = self.get_loss(inputs)
-        self.log_gamma[0].assign(tf.math.log(tf.cast(self.batch_size, dtype=tf.float32) / loss))
+        self.log_gamma[0].assign(tf.math.log(tf.cast(self.n_observations, dtype=tf.float32) / loss))
         if self.log_gamma > 6.0:
             self.log_gamma[0].assign(6.0)
             # self.epsilon_min = tf.constant(5e-4, dtype=tf.float32)
@@ -109,7 +111,7 @@ class HMC(keras.Model):
         Compute sub-model loss.
 
         :param inputs: training data, tuple (inputs, targets).
-        :type inputs: (tf.Tensor, tf.Tensor)
+        :type inputs: (Any, Any)
         :return: loss value
         :rtype: tf.Tensor
         """
@@ -152,7 +154,7 @@ class HMC(keras.Model):
         :rtype: (tf.Tensor, tf.Tensor)
         """
         dlog_gamma = tf.exp(state.log_gamma) * (loss / 2.0 + 1.0) \
-                     - (tf.cast(self.batch_size, tf.float32) / 2.0 + 1.0)
+                     - (tf.cast(self.n_observations, tf.float32) / 2.0 + 1.0)
         dlog_lambda = tf.exp(state.log_lambda) * (tf.reduce_sum(tf.abs(state.position)) + 1.0) \
                       - (tf.cast(self.param_num, tf.float32) + 1.0)
         return dlog_gamma, dlog_lambda
@@ -237,7 +239,7 @@ class HMC(keras.Model):
         w = state.position
         u = tf.exp(state.log_gamma) * (loss / 2.0 + 1.0) \
             + tf.exp(state.log_lambda) * (tf.reduce_sum(tf.abs(w)) + 1.0) \
-            - (tf.cast(self.batch_size, tf.float32) / 2.0 + 1.0) * state.log_gamma \
+            - (tf.cast(self.n_observations, tf.float32) / 2.0 + 1.0) * state.log_gamma \
             - (tf.cast(self.param_num, tf.float32) + 1.0) * state.log_lambda
         return u
 
@@ -261,7 +263,7 @@ class HMC(keras.Model):
         Run `L` steps of the leapfrog procedure to update the Hamiltonian.
 
         :param inputs: training data, tuple (inputs, targets).
-        :type inputs: (tf.Tensor, tf.Tensor)
+        :type inputs: (Any, Any)
         :param state: initial state of the walk.
         :type state: HMCState
         :param epsilon: epsilon value for the leapfrog process.
@@ -313,7 +315,7 @@ class HMC(keras.Model):
         Run one step of HMC walk with the given model.
 
         :param inputs: training data, tuple (inputs, targets).
-        :type inputs: (tf.Tensor, tf.Tensor)
+        :type inputs: (Any, Any)
         :param step: current step of the walk.
         :type step: tf.Tensor
         :param n_iter: total length of the HMC walk.

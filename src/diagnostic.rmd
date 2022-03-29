@@ -1,0 +1,52 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+The [R plugin](https://www.jetbrains.com/help/pycharm/r-plugin-support.html) for IntelliJ-based IDEs provides
+handy capabilities to work with the [R Markdown](https://www.jetbrains.com/help/pycharm/r-markdown.html) files.
+To [add](https://www.jetbrains.com/help/pycharm/r-markdown.html#add-code-chunk) a new R chunk,
+position the caret at any line or the code chunk, then click "+".
+
+The code chunk appears:
+```{r}
+library(RcppCNPy)
+library(coda)
+library(ggplot2)
+
+files <- list.files(path="etc/diagnostic", pattern="*.npy", full.names=TRUE, recursive=FALSE)
+```
+
+Type any R code in the chunk, for example:
+```{r}
+file <- files[1]
+x <- npyLoad(file)
+y <- mcmc.list(apply(x, 2, function(col) {mcmc(col)}, simplify = FALSE))
+name <- basename(file)
+name <- substr(name, 1, nchar(name) - 4)
+```
+```{r}
+geweke.plot(y[[1]], main="Geweke test", sub=name)
+```
+```{r}
+gelman.plot(y, main="Gelman test", sub=name, autoburnin = FALSE)
+```
+```{r}
+autocorr.plot(y[[1]],lag.max=dim(x)[1]/4, main="Auto-correlation plot", sub=name)
+```
+```{r}
+file <- files[2]
+x <- npyLoad(file)
+y <- mcmc.list(apply(x, 2, function(col) {mcmc(col)}, simplify = FALSE))
+name <- basename(file)
+name <- substr(name, 1, nchar(name) - 4)
+```
+```{r}
+geweke.plot(y[[1]], main="Geweke test", sub=name)
+```
+```{r}
+gelman.plot(y, main="Gelman test", sub=name, autoburnin = FALSE)
+```
+```{r}
+autocorr.plot(y[[1]],lag.max=dim(x)[1]/4, main="Auto-correlation plot", sub=name)
+```

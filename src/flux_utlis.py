@@ -22,3 +22,10 @@ def fluxes_SIF_predict_noSIF(model_NEE, label, EV1, EV2, NEE_max_abs):
     Reco_NN = tf.reshape(Reco_NN, (NEE_NN.shape[0],))
 
     return NEE_NN, GPP_NN, Reco_NN
+
+
+def get_layer_model(model, name):
+    layer_model = Model(inputs=model.input,
+                        outputs=model.get_layer(name).output)
+    layer_model.compile()
+    return layer_model

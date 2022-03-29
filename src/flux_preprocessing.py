@@ -56,6 +56,8 @@ def load_dataset(filename):
     data_nn, data_day = impose_noise(data_nn)
 
     train, test = train_test_split(data_nn, test_size=0.3, random_state=31, shuffle=True)
+    train = train.sort_index()
+    test = test.sort_index()
     train['train_label'] = 'Training set'
     test['train_label'] = 'Test set'
 

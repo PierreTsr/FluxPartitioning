@@ -1,52 +1,87 @@
 ---
-title: "R Notebook"
+title: "HMC Diagnostics"
 output: html_notebook
 ---
 
-The [R plugin](https://www.jetbrains.com/help/pycharm/r-plugin-support.html) for IntelliJ-based IDEs provides
-handy capabilities to work with the [R Markdown](https://www.jetbrains.com/help/pycharm/r-markdown.html) files.
-To [add](https://www.jetbrains.com/help/pycharm/r-markdown.html#add-code-chunk) a new R chunk,
-position the caret at any line or the code chunk, then click "+".
+This notebook runs a few statistical diagnostics on the logged variables of an HMC run. The experiment is defined through the  `path` variable which defines the directory where the logging was made. This notebook assumes that the files provided are:
 
-The code chunk appears:
+- `log_gamma.npy`
+- `log_lambda.npy`
+- `parameter*.npy`
 ```{r}
 library(RcppCNPy)
 library(coda)
 library(ggplot2)
 
-files <- list.files(path="etc/diagnostic", pattern="*.npy", full.names=TRUE, recursive=FALSE)
+path <- "../etc/diagnostic/flux_nn"
+files <- list.files(path=path, pattern="*.npy", full.names=TRUE, recursive=FALSE)
+files
 ```
 
-Type any R code in the chunk, for example:
+# Geweke Z-score
+
+We first look at the Geweke Z-score for all our variables. This test compares the distribution between the beginning and the end of each Markov chain.
+```{r}
+for(file in files){
+  x <- npyLoad(file)
+  y <- mcmc.list(apply(x, 2, function(col) {mcmc(col)}, simplify = FALSE))
+  name <- basename(file)
+  name <- substr(name, 1, nchar(name) - 4)
+  cat("===== Test for", name, "=====\n")
+  print(geweke.diag(y[[1]]))
+}
+```
+This test is a success if all the `var1` values respect $-2\leq var1 \leq 2$.
+
+# Gelman-Rubin test
+
+The Gelman-Rubin test uses several Markov chains for each variable. It computes a ratio using both the within chain variance and the between chain variance. If the chain converges correctly, it should be close to 1.
+```{r}
+for(file in files){
+  x <- npyLoad(file)
+  y <- mcmc.list(apply(x, 2, function(col) {mcmc(col)}, simplify = FALSE))
+  name <- basename(file)
+  name <- substr(name, 1, nchar(name) - 4)
+  cat("===== Test for", name, "=====\n")
+  print(gelman.diag(y))
+}
+```
+# Auto-correlation
+
+Finally, for each parameter we plot its auto-correlation for different lag values:
+
 ```{r}
 file <- files[1]
 x <- npyLoad(file)
 y <- mcmc.list(apply(x, 2, function(col) {mcmc(col)}, simplify = FALSE))
 name <- basename(file)
 name <- substr(name, 1, nchar(name) - 4)
+autocorr.plot(y[[1]],lag.max=dim(x)[1]/4, main=name)
 ```
-```{r}
-geweke.plot(y[[1]], main="Geweke test", sub=name)
-```
-```{r}
-gelman.plot(y, main="Gelman test", sub=name, autoburnin = FALSE)
-```
-```{r}
-autocorr.plot(y[[1]],lag.max=dim(x)[1]/4, main="Auto-correlation plot", sub=name)
-```
+
 ```{r}
 file <- files[2]
 x <- npyLoad(file)
 y <- mcmc.list(apply(x, 2, function(col) {mcmc(col)}, simplify = FALSE))
 name <- basename(file)
 name <- substr(name, 1, nchar(name) - 4)
+autocorr.plot(y[[1]],lag.max=dim(x)[1]/4, main=name)
 ```
+
 ```{r}
-geweke.plot(y[[1]], main="Geweke test", sub=name)
+file <- files[3]
+x <- npyLoad(file)
+y <- mcmc.list(apply(x, 2, function(col) {mcmc(col)}, simplify = FALSE))
+name <- basename(file)
+name <- substr(name, 1, nchar(name) - 4)
+autocorr.plot(y[[1]],lag.max=dim(x)[1]/4, main=name)
 ```
+
 ```{r}
-gelman.plot(y, main="Gelman test", sub=name, autoburnin = FALSE)
-```
-```{r}
-autocorr.plot(y[[1]],lag.max=dim(x)[1]/4, main="Auto-correlation plot", sub=name)
+file <- files[4]
+x <- npyLoad(file)
+y <- mcmc.list(apply(x, 2, function(col) {mcmc(col)}, simplify = FALSE))
+name <- basename(file)
+name <- substr(name, 1, nchar(name) - 4)
+autocorr.plot(y[[1]],lag.max=dim(x)[1]/4, main=name)
 ```

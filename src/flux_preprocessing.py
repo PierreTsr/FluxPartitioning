@@ -86,8 +86,9 @@ def load_dataset(filename):
     # Y_data Normalization
     NEE_max_abs = (np.abs(NEE_train.values)).max()
     NEE_train1 = NEE_train.values / NEE_max_abs
+    NEE_test1 = NEE_test.values / NEE_max_abs
 
-    out = [EV1_train1, EV2_train1, NEE_train1, label_train, EV1_test1, EV2_test1, NEE_test, label_test, NEE_max_abs]
+    out = [EV1_train1, EV2_train1, NEE_train1, label_train, EV1_test1, EV2_test1, NEE_test1, label_test, NEE_max_abs]
     for i, x in enumerate(out):
         out[i] = tf.convert_to_tensor(x, dtype=tf.float32)
     return train, test, *out

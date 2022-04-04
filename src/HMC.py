@@ -54,11 +54,14 @@ class HMC(keras.Model):
             self.log_gamma[0].assign(6.0)
             # self.epsilon_min = tf.constant(5e-4, dtype=tf.float32)
             # self.epsilon_max = tf.constant(5e-4, dtype=tf.float32)
-        self.log_lambda.assign(tf.random.normal((1,)))
+        parameters = self.get_model_params()
+        self.log_lambda[0].assign(tf.math.log(1/tf.sqrt(tf.math.reduce_variance(parameters)/2)))
 
     def epsilon(self, step, n_iter):
-        return self.epsilon_max * tf.exp(- tf.cast(step, tf.float32) / tf.cast(n_iter, tf.float32)
-                                         * tf.math.log(self.epsilon_max / self.epsilon_min))
+        # return self.epsilon_max * tf.exp(- tf.cast(step, tf.float32) / tf.cast(n_iter, tf.float32)
+        #                                  * tf.math.log(self.epsilon_max / self.epsilon_min))
+        rnd = tf.random.uniform((), tf.math.log(self.epsilon_min), tf.math.log(self.epsilon_max))
+        return tf.exp(rnd)
 
     @staticmethod
     def probability(hamiltonian_init, hamiltonian_final):
@@ -345,10 +348,8 @@ class HMC(keras.Model):
         p = tf.random.uniform((1,), 0, 1)
 
         if p < p_new_state:
-            final_state = new_state
-            self.update_state(final_state)
-            return final_state, loss_final, p_new_state, True, hamiltonian_final
+            self.update_state(new_state)
+            return new_state, loss_final, p_new_state, True, hamiltonian_final
         else:
-            final_state = init_state
             self.update_state(init_state)
-            return final_state, loss_initial, p_new_state, False, hamiltonian_init
+            return init_state, loss_initial, p_new_state, False, hamiltonian_init

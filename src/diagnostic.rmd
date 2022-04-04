@@ -15,6 +15,7 @@ library(ggplot2)
 
 path <- "../etc/diagnostic/flux_nn"
 files <- list.files(path=path, pattern="*.npy", full.names=TRUE, recursive=FALSE)
+files <- files[files != "../etc/diagnostic/flux_nn/full_parameters.npy"]
 files
 ```
 
@@ -35,7 +36,7 @@ This test is a success if all the `var1` values respect $-2\leq var1 \leq 2$.
 
 # Gelman-Rubin test
 
-The Gelman-Rubin test uses several Markov chains for each variable. It computes a ratio using both the within chain variance and the between chain variance. If the chain converges correctly, it should be close to 1.
+The Gelman-Rubin test uses several Markov chains for each variable. It computes a ratio using both the within-chain variance and the between-chain variance. If the chain converges correctly, it should be close to 1.
 ```{r}
 for(file in files){
   x <- npyLoad(file)

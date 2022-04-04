@@ -29,3 +29,16 @@ def get_layer_model(model, name):
                         outputs=model.get_layer(name).output)
     layer_model.compile()
     return layer_model
+
+
+def count_out_distribution(df, key, reference="canopy", n_sigma=2):
+    ref = key + "_" + reference
+    mean = key + "_mean"
+    sigma = key + "_sigma"
+
+    lower = df[mean] - n_sigma * df[sigma]
+    upper = df[mean] + n_sigma * df[sigma]
+
+    above = df[ref] > upper
+    below = df[ref] < lower
+    return sum(above) + sum(below)

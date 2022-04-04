@@ -1,6 +1,6 @@
 ---
 title: "HMC Diagnostics"
-output: html_notebook
+output: rmarkdown::html_vignette
 ---
 
 This notebook runs a few statistical diagnostics on the logged variables of an HMC run. The experiment is defined through the  `path` variable which defines the directory where the logging was made. This notebook assumes that the files provided are:

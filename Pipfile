@@ -13,6 +13,7 @@ scikit-learn = "*"
 tensorflow = ">2"
 keras = "*"
 nbconvert = {extras = ["webpdf"], version = "*"}
+jupyterlab = "*"
 
 [dev-packages]
 

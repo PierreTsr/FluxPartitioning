@@ -10,7 +10,7 @@ matplotlib = "*"
 jupyter = "*"
 pydot = "*"
 scikit-learn = "*"
-tensorflow = "*"
+tensorflow = ">2"
 keras = "*"
 nbconvert = {extras = ["webpdf"], version = "*"}
 

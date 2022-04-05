@@ -7,7 +7,7 @@
         <entry key="file://$PROJECT_DIR$/src/diagnostic.rmd">
           <value>
             <RMarkdownRenderProfile>
-              <option name="lastOutput" value="$PROJECT_DIR$/diagnostic.nb.html" />
+              <option name="lastOutput" value="$PROJECT_DIR$/diagnostic.html" />
               <option name="outputDirectoryUrl" value="file://$PROJECT_DIR$" />
             </RMarkdownRenderProfile>
           </value>

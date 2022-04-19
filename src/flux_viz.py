@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
@@ -29,9 +31,12 @@ def diag_line(x, y, ax, color='black', xy=(.05, .76)):
 
 
 def quad_viz(train_df, test_df, key, reference="canopy", filename=None, colors=None, bayesian=True, **kwargs):
-    fig, ax = plt.subplots(figsize=(15, 7.5), nrows=2, ncols=2, gridspec_kw={'width_ratios': [3, 1]})
+    if bayesian:
+        fig, ax = plt.subplots(figsize=(25, 10), nrows=2, ncols=3, gridspec_kw={'width_ratios': [3, 1, 1]})
+    else:
+        fig, ax = plt.subplots(figsize=(20, 10), nrows=2, ncols=2, gridspec_kw={'width_ratios': [3, 1]})
 
-    s_circle = 1
+    s_circle = 4
     cmap = 'RdBu_r'
     alpha = 0.6
 
@@ -39,44 +44,80 @@ def quad_viz(train_df, test_df, key, reference="canopy", filename=None, colors=N
     map = key + "_MAP"
     mean = key + "_mean"
     sigma = key + "_sigma"
+    nn = key + "_NN"
 
-    ax[0, 0].scatter(train_df.index, train_df[ref], label='Daytime ' + ref, s=s_circle)
-    ax[0, 0].scatter(train_df.index, train_df[map], label='Daytime ' + map, s=s_circle, alpha=0.6)
+    ax[0, 0].scatter(train_df.index, train_df[ref], label=ref, s=s_circle)
     if bayesian:
-        # ax[0, 0].scatter(train_df.index, train_df[map], label='Daytime ' + mean, s=s_circle, alpha=0.6)
+        ax[0, 0].scatter(train_df.index, train_df[map], label=map, s=s_circle, alpha=0.6)
+        ax[0, 0].scatter(train_df.index, train_df[mean], label=mean, s=s_circle, alpha=0.6)
         lower = train_df[mean] - 2 * train_df[sigma]
         upper = train_df[mean] + 2 * train_df[sigma]
-        ax[0, 0].fill_between(train_df.index, lower, upper, facecolor="red", alpha=0.5, label="Two std band")
+        where = [True] * train_df.shape[0]
+        where[(train_df.index < datetime(2014, 1, 1)).sum() - 1] = False
+        ax[0, 0].fill_between(train_df.index, lower, upper, where=where, facecolor="red", alpha=0.5,
+                              label="Two std band")
+    else:
+        ax[0, 0].scatter(train_df.index, train_df[nn], label=nn, s=s_circle, alpha=0.6)
     ax[0, 0].set_ylabel(key)
     ax[0, 0].set_title('Training Set', fontsize=14, fontweight='bold')
 
-    ax[1, 0].scatter(test_df.index, test_df[ref], label='Daytime ' + ref, s=s_circle)
-    ax[1, 0].scatter(test_df.index, test_df[map], label='Daytime ' + map, s=s_circle, alpha=0.6)
+    ax[1, 0].scatter(test_df.index, test_df[ref], label=ref, s=s_circle)
     if bayesian:
-        # ax[1, 0].scatter(test_df.index, test_df[map], label='Daytime ' + mean, s=s_circle, alpha=0.6)
+        ax[1, 0].scatter(test_df.index, test_df[map], label=map, s=s_circle, alpha=0.6)
+        ax[1, 0].scatter(test_df.index, test_df[mean], label=mean, s=s_circle, alpha=0.6)
         lower = test_df[mean] - 2 * test_df[sigma]
         upper = test_df[mean] + 2 * test_df[sigma]
+        where = [True] * train_df.shape[0]
+        where[(train_df.index < datetime(2014, 1, 1)).sum() - 1] = False
         ax[1, 0].fill_between(test_df.index, lower, upper, facecolor="red", alpha=0.5, label="Two std band")
+    else:
+        ax[1, 0].scatter(test_df.index, test_df[nn], label=nn, s=s_circle, alpha=0.6)
     ax[1, 0].set_ylabel(key)
     ax[1, 0].set_title('Test Set', fontsize=14, fontweight='bold')
 
-    train_df.plot(map, ref, alpha=alpha, ax=ax[0, 1], kind='scatter', s=15,  c=colors, cmap=cmap)
+    train_df.plot(map, ref, alpha=alpha, ax=ax[0, 1], kind='scatter', s=15, c=colors, cmap=cmap)
     test_df.plot(map, ref, alpha=alpha, ax=ax[1, 1], kind='scatter', s=15, c=colors, cmap=cmap)
+    if bayesian:
+        train_df.plot(mean, ref, alpha=alpha, ax=ax[0, 2], kind='scatter', s=15, c=colors, cmap=cmap)
+        test_df.plot(mean, ref, alpha=alpha, ax=ax[1, 2], kind='scatter', s=15, c=colors, cmap=cmap)
 
     if "unit" in kwargs.keys():
-        ax[0, 1].set_xlabel(ref + "\n" + kwargs["unit"])
-        ax[0, 1].set_ylabel(map + "\n" + kwargs["unit"])
-        ax[1, 1].set_xlabel(ref + "\n" + kwargs["unit"])
-        ax[1, 1].set_ylabel(map + "\n" + kwargs["unit"])
-
+        if bayesian:
+            ax[0, 1].set_ylabel(ref + "\n" + kwargs["unit"])
+            ax[0, 1].set_xlabel(map + "\n" + kwargs["unit"])
+            ax[1, 1].set_ylabel(ref + "\n" + kwargs["unit"])
+            ax[1, 1].set_xlabel(map + "\n" + kwargs["unit"])
+            ax[0, 2].set_ylabel(ref + "\n" + kwargs["unit"])
+            ax[0, 2].set_xlabel(mean + "\n" + kwargs["unit"])
+            ax[1, 2].set_ylabel(ref + "\n" + kwargs["unit"])
+            ax[1, 2].set_xlabel(mean + "\n" + kwargs["unit"])
+        else:
+            ax[0, 1].set_ylabel(ref + "\n" + kwargs["unit"])
+            ax[0, 1].set_xlabel(nn + "\n" + kwargs["unit"])
+            ax[1, 1].set_ylabel(ref + "\n" + kwargs["unit"])
+            ax[1, 1].set_xlabel(nn + "\n" + kwargs["unit"])
     else:
-        ax[0, 1].set_xlabel(ref)
-        ax[0, 1].set_ylabel(map)
-        ax[1, 1].set_xlabel(ref)
-        ax[1, 1].set_ylabel(map)
+        if bayesian:
+            ax[0, 1].set_ylabel(ref)
+            ax[0, 1].set_xlabel(map)
+            ax[1, 1].set_ylabel(ref)
+            ax[1, 1].set_xlabel(map)
+            ax[0, 2].set_ylabel(ref)
+            ax[0, 2].set_xlabel(mean)
+            ax[1, 2].set_ylabel(ref)
+            ax[1, 2].set_xlabel(mean)
+        else:
+            ax[0, 1].set_ylabel(ref)
+            ax[0, 1].set_xlabel(nn)
+            ax[1, 1].set_ylabel(ref)
+            ax[1, 1].set_xlabel(nn)
 
     diag_line(train_df[map], train_df[ref], ax=ax[0, 1])
     diag_line(test_df[map], test_df[ref], ax=ax[1, 1])
+
+    if bayesian:
+        diag_line(train_df[mean], train_df[ref], ax=ax[0, 2])
+        diag_line(test_df[mean], test_df[ref], ax=ax[1, 2])
 
     ax[0, 1].set_title('Training set', fontsize=14, fontweight='bold')
     ax[1, 1].set_title('Test set', fontsize=14, fontweight='bold')

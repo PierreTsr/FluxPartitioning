@@ -1,6 +1,6 @@
 import tensorflow as tf
 from tensorflow import keras
-from typing import NamedTuple, Any
+from typing import NamedTuple
 
 
 class HMCState(NamedTuple):
@@ -54,8 +54,8 @@ class HMC(keras.Model):
             self.log_gamma[0].assign(6.0)
             # self.epsilon_min = tf.constant(5e-4, dtype=tf.float32)
             # self.epsilon_max = tf.constant(5e-4, dtype=tf.float32)
-        parameters = self.get_model_params()
-        self.log_lambda[0].assign(tf.math.log(1/tf.sqrt(tf.math.reduce_variance(parameters)/2)))
+        # parameters = self.get_model_params()
+        # self.log_lambda[0].assign(tf.math.log(1/tf.sqrt(tf.math.reduce_variance(parameters)/2)))
 
     def epsilon(self, step, n_iter):
         # return self.epsilon_max * tf.exp(- tf.cast(step, tf.float32) / tf.cast(n_iter, tf.float32)
@@ -260,7 +260,7 @@ class HMC(keras.Model):
         """
         k = HMC.kinetic_energy(state)
         u = self.potential_energy(loss, state)
-        return k + u
+        return k + u, u
 
     def leap_frog(self, inputs, state: HMCState, epsilon):
         """
@@ -336,20 +336,20 @@ class HMC(keras.Model):
 
         self.set_model_params(init_state.position)
         loss_initial = self.get_loss(inputs)
-        hamiltonian_init = self.hamiltonian(loss_initial, init_state)
+        hamiltonian_initial, loss_initial = self.hamiltonian(loss_initial, init_state)
 
         new_state = self.leap_frog(inputs, init_state, epsilon)
 
         self.set_model_params(new_state.position)
         loss_final = self.get_loss(inputs)
-        hamiltonian_final = self.hamiltonian(loss_final, new_state)
+        hamiltonian_final, loss_final = self.hamiltonian(loss_final, new_state)
 
-        p_new_state = self.probability(hamiltonian_init, hamiltonian_final)
+        p_new_state = self.probability(hamiltonian_initial, hamiltonian_final)
         p = tf.random.uniform((1,), 0, 1)
 
         if p < p_new_state:
             self.update_state(new_state)
-            return new_state, loss_final, p_new_state, True, hamiltonian_final
+            return new_state, loss_final, p_new_state, True
         else:
             self.update_state(init_state)
-            return init_state, loss_initial, p_new_state, False, hamiltonian_init
+            return init_state, loss_initial, p_new_state, False

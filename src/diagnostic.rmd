@@ -16,6 +16,7 @@ library(ggplot2)
 path <- "../etc/diagnostic/flux_nn"
 files <- list.files(path=path, pattern="*.npy", full.names=TRUE, recursive=FALSE)
 files <- files[files != "../etc/diagnostic/flux_nn/full_parameters.npy"]
+files <- files[files != "../etc/diagnostic/flux_nn/log_likelihood.npy"]
 files
 ```
 

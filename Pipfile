@@ -14,6 +14,8 @@ tensorflow = ">2"
 keras = "*"
 nbconvert = {extras = ["webpdf"], version = "*"}
 jupyterlab = "*"
+tqdm = "*"
+tensorflow-probability = "*"
 
 [dev-packages]
 

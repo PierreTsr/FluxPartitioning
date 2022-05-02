@@ -55,7 +55,7 @@ def load_dataset(filename, data_dir=data_dir):
     # add noise to NEE & SIF simulations
     data_nn, _ = impose_noise(data_nn)
 
-    train, test, val = data_nn.iloc[:3945, :].copy(), data_nn.iloc[3945:5260, :].copy(), data_nn.iloc[5260:, :].copy()
+    train, val, test = data_nn.iloc[:3945, :].copy(), data_nn.iloc[3945:5260, :].copy(), data_nn.iloc[5260:, :].copy()
     train['train_label'] = 'Training set'
     test['train_label'] = 'Test set'
     val['train_label'] = "Validation set"
@@ -63,27 +63,30 @@ def load_dataset(filename, data_dir=data_dir):
     # split into train & test datasets
     var_NEE = 'NEE_obs'
 
-    EV1_label = ['Tair', 'RH', 'PAR', 'SWC', 'u', 'LAI']
+    EV1_label = ['Tair', 'RH', 'PAR', 'SWC', 'u', 'LAI', 'APAR_canopy']
     EV2_label = ['Tair', 'SWC', 'u', 'LAI']
 
     EV1_train = train[EV1_label].astype('float32')  # EV for GPP
     EV2_train = train[EV2_label].astype('float32')  # EV for Reco
     NEE_train = train[var_NEE].astype('float32')
     APAR_max = train["APAR_canopy"].values.max()
-    label_train = train['APAR_canopy'].values / APAR_max
+    # label_train = train['APAR_canopy'].values / APAR_max
     # label_train = train['APAR_label'].values
+    label_train = train['APAR_canopy'] > 0
 
     EV1_test = test[EV1_label].astype('float32')  # EV for GPP
     EV2_test = test[EV2_label].astype('float32')  # EV for Reco
     NEE_test = test[var_NEE].astype('float32')
-    label_test = test['APAR_canopy'].values / APAR_max
+    # label_test = test['APAR_canopy'].values / APAR_max
     # label_test = test['APAR_label'].values
+    label_test = test['APAR_canopy'] > 0
 
     EV1_val = val[EV1_label].astype('float32')  # EV for GPP
     EV2_val = val[EV2_label].astype('float32')  # EV for Reco
     NEE_val = val[var_NEE].astype('float32')
-    label_val = val['APAR_canopy'].values / APAR_max
+    # label_val = val['APAR_canopy'].values / APAR_max
     # label_val = val['APAR_label'].values
+    label_val = val["APAR_canopy"] > 0
 
     EV1_train1, EV1_test1 = standard_x(EV1_train, EV1_test)
     EV2_train1, EV2_test1 = standard_x(EV2_train, EV2_test)

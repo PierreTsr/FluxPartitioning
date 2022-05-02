@@ -1,8 +1,10 @@
 from datetime import datetime
 
 import matplotlib.pyplot as plt
+from matplotlib.gridspec import GridSpec
 import pandas as pd
 import numpy as np
+from brokenaxes import brokenaxes
 from scipy import stats
 
 
@@ -32,9 +34,36 @@ def diag_line(x, y, ax, color='black', xy=(.05, .76)):
 
 def quad_viz(train_df, test_df, key, reference="canopy", filename=None, colors=None, bayesian=True, **kwargs):
     if bayesian:
-        fig, ax = plt.subplots(figsize=(25, 10), nrows=2, ncols=3, gridspec_kw={'width_ratios': [3, 1, 1]})
+        fig = plt.figure(figsize=(25, 10))
+        gs = GridSpec(2, 3, width_ratios=[3, 1, 1], figure=fig)
     else:
-        fig, ax = plt.subplots(figsize=(20, 10), nrows=2, ncols=2, gridspec_kw={'width_ratios': [3, 1]})
+        fig = plt.figure(figsize=(20, 10))
+        gs = GridSpec(2, 2, width_ratios=[3, 1], figure=fig)
+
+    train_title = "Training Set"
+    test_title = "Testing Set"
+    if "postfix" in kwargs.keys():
+        train_title += " - " + kwargs["postfix"]
+        test_title += " - " + kwargs["postfix"]
+
+    ax = np.empty(gs.get_geometry(), dtype=object)
+    for i in range(gs.nrows):
+        for j in range(gs.ncols):
+            if (i, j) == (0, 0):
+                if "date_break" in kwargs:
+                    lim = kwargs["date_break"]
+                    ax[0, 0] = brokenaxes(
+                        xlims=(
+                            (train_df.index.min(), train_df.loc[train_df.index < lim, :].index.max()),
+                            (train_df.loc[train_df.index > lim, :].index.min(), train_df.index.max())
+                        ),
+                        subplot_spec=gs[0],
+                        diag_color="w"
+                    )
+                else:
+                    ax[0, 0] = fig.add_subplot(gs[0])
+            else:
+                ax[i, j] = fig.add_subplot(gs[i * gs.ncols + j])
 
     s_circle = 4
     cmap = 'RdBu_r'
@@ -59,7 +88,7 @@ def quad_viz(train_df, test_df, key, reference="canopy", filename=None, colors=N
     else:
         ax[0, 0].scatter(train_df.index, train_df[nn], label=nn, s=s_circle, alpha=0.6)
     ax[0, 0].set_ylabel(key)
-    ax[0, 0].set_title('Training Set', fontsize=14, fontweight='bold')
+    ax[0, 0].set_title(train_title, fontsize=14, fontweight='bold')
 
     ax[1, 0].scatter(test_df.index, test_df[ref], label=ref, s=s_circle)
     if bayesian:
@@ -73,7 +102,7 @@ def quad_viz(train_df, test_df, key, reference="canopy", filename=None, colors=N
     else:
         ax[1, 0].scatter(test_df.index, test_df[nn], label=nn, s=s_circle, alpha=0.6)
     ax[1, 0].set_ylabel(key)
-    ax[1, 0].set_title('Test Set', fontsize=14, fontweight='bold')
+    ax[1, 0].set_title(test_title, fontsize=14, fontweight='bold')
 
     if bayesian:
         train_df.plot(mean, ref, alpha=alpha, ax=ax[0, 2], kind='scatter', s=15, c=colors, cmap=cmap)
@@ -121,11 +150,11 @@ def quad_viz(train_df, test_df, key, reference="canopy", filename=None, colors=N
             ax[1, 1].set_ylabel(ref)
             ax[1, 1].set_xlabel(nn)
 
-    ax[0, 1].set_title('Training set', fontsize=14, fontweight='bold')
-    ax[1, 1].set_title('Test set', fontsize=14, fontweight='bold')
+    ax[0, 1].set_title(train_title, fontsize=14, fontweight='bold')
+    ax[1, 1].set_title(test_title, fontsize=14, fontweight='bold')
     if bayesian:
-        ax[0, 2].set_title('Training set', fontsize=14, fontweight='bold')
-        ax[1, 2].set_title('Test set', fontsize=14, fontweight='bold')
+        ax[0, 2].set_title(train_title, fontsize=14, fontweight='bold')
+        ax[1, 2].set_title(test_title, fontsize=14, fontweight='bold')
 
     for each_ax in ax[:, 0]:
         each_ax.legend(loc='best')
@@ -134,7 +163,7 @@ def quad_viz(train_df, test_df, key, reference="canopy", filename=None, colors=N
     plt.rcParams['savefig.dpi'] = 220
     if filename is not None:
         fig.savefig(filename)
-    plt.show()
+    # plt.show()
     return fig, ax
 
 
@@ -163,7 +192,7 @@ def dual_viz_val(val_df, key, reference="canopy", filename=None, colors=None, ba
         where = [True] * val_df.shape[0]
         where[(val_df.index < datetime(2014, 1, 1)).sum() - 1] = False
         ax[0].fill_between(val_df.index, lower, upper, where=where, facecolor="red", alpha=0.5,
-                              label="Two std band")
+                           label="Two std band")
     else:
         ax[0].scatter(val_df.index, val_df[nn], label=nn, s=s_circle, alpha=0.6)
     ax[0].set_ylabel(key)

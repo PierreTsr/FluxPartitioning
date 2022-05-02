@@ -16,6 +16,7 @@ nbconvert = {extras = ["webpdf"], version = "*"}
 jupyterlab = "*"
 tqdm = "*"
 tensorflow-probability = "*"
+brokenaxes = "*"
 
 [dev-packages]
 

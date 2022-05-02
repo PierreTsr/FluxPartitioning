@@ -7,9 +7,12 @@
  """
 
 import functools as ft
+from math import ceil
+
 import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
+from tqdm import tqdm
 
 tfd = tfp.distributions
 tfb = tfp.bijectors
@@ -59,15 +62,35 @@ def sample_chain(*args, **kwargs):
     return tfp.mcmc.sample_chain(*args, **kwargs)
 
 
+def sample_chain_sequentially(num_results, sequence_len, current_state, prev_kernel_results, *args, **kwargs):
+    num_steps = [sequence_len] * (num_results // sequence_len)
+    if num_results % sequence_len > 0:
+        num_steps += [num_results % sequence_len]
+    chains = []
+    with tqdm(total=num_results, position=0) as pbar:
+        for n in num_steps:
+            chain, trace, final_kernel_results = sample_chain(*args, num_results=n, current_state=current_state, previous_kernel_results=prev_kernel_results, **kwargs)
+            prev_kernel_results = final_kernel_results
+            current_state = tf.nest.map_structure(lambda c: c[-1], chain)
+            acceptance = trace[0].inner_results.is_accepted.numpy().mean()
+            pbar.set_postfix_str("Acceptance rate: {r:.2f}".format(r=acceptance))
+            pbar.update(n)
+            chains.append([param.numpy() for param in chain])
+    chains = [np.concatenate([chain[i] for chain in chains], axis=0) for i in range(len(chains[0]))]
+    return chains, final_kernel_results
+
+
 def run_hmc(
         target_log_prob_fn,
         step_size=1e-2,
         num_leapfrog_steps=10,
         num_burnin_steps=1000,
         num_results=1000,
+        seq_len=10,
         current_state=None,
         resume=None,
-        log_dir="logs/hmc/",
+        sampler="hmc",
+        log_dir="../etc/logs/hmc/",
         step_size_adapter="dual_averaging",
         **kwargs,
 ):
@@ -88,69 +111,55 @@ def run_hmc(
     err = "Either current_state or resume is required when calling run_hmc"
     assert current_state is not None or resume is not None, err
 
-    summary_writer = tf.summary.create_file_writer(log_dir)
+    summary_writer = tf.summary.create_file_writer(str(log_dir))
 
     step_size_adapter = {
         "simple": tfp.mcmc.SimpleStepSizeAdaptation,
         "dual_averaging": tfp.mcmc.DualAveragingStepSizeAdaptation,
     }[step_size_adapter]
-
-    kernel = tfp.mcmc.HamiltonianMonteCarlo(
-        target_log_prob_fn,
-        step_size=step_size,
-        num_leapfrog_steps=num_leapfrog_steps,
-    )
-    adaptive_kernel = step_size_adapter(
-        kernel, num_adaptation_steps=num_burnin_steps
-    )
+    if sampler == "nuts":
+        kernel = tfp.mcmc.NoUTurnSampler(target_log_prob_fn, step_size=step_size)
+        adaptive_kernel = step_size_adapter(
+            kernel,
+            num_adaptation_steps=num_burnin_steps,
+            step_size_setter_fn=lambda pkr, new_step_size: pkr._replace(
+                step_size=new_step_size
+            ),
+            step_size_getter_fn=lambda pkr: pkr.step_size,
+            log_accept_prob_getter_fn=lambda pkr: pkr.log_accept_ratio,
+        )
+    elif sampler == "hmc":
+        kernel = tfp.mcmc.HamiltonianMonteCarlo(
+            target_log_prob_fn,
+            step_size=step_size,
+            num_leapfrog_steps=num_leapfrog_steps,
+        )
+        adaptive_kernel = step_size_adapter(
+            kernel, num_adaptation_steps=num_burnin_steps
+        )
 
     prev_kernel_results = adaptive_kernel.bootstrap_results(current_state)
     step = 0
 
     tf.summary.trace_on(graph=True, profiler=False)
 
-    chain, trace, final_kernel_results = sample_chain(
-        kernel=adaptive_kernel,
-        current_state=current_state,
-        previous_kernel_results=prev_kernel_results,
-        num_results=num_burnin_steps + num_results,
-        trace_fn=ft.partial(trace_fn, summary_freq=20),
-        return_final_kernel_results=True,
-        **kwargs,
-    )
-    print("Acceptance rate:", trace[0].inner_results.is_accepted.numpy().mean())
+    # chain, trace, _ = sample_chain(
+    #     kernel=adaptive_kernel,
+    #     current_state=current_state,
+    #     previous_kernel_results=prev_kernel_results,
+    #     num_results=num_burnin_steps + num_results,
+    #     trace_fn=ft.partial(trace_fn, summary_freq=20),
+    #     return_final_kernel_results=True,
+    #     **kwargs,
+    # )
+    chain, kernel_results = sample_chain_sequentially(num_burnin_steps + num_results, seq_len, current_state, prev_kernel_results, kernel=adaptive_kernel, trace_fn=ft.partial(trace_fn, summary_freq=20), return_final_kernel_results=True, **kwargs)
 
     with summary_writer.as_default():
         tf.summary.trace_export(name="hmc_trace", step=step)
     summary_writer.close()
 
     burnin, samples = zip(*[(t[:-num_results], t[-num_results:]) for t in chain])
-    return burnin, samples, trace, final_kernel_results
-
-
-def get_map_trace(target_log_prob_fn, state, n_iter=1000, save_every=10, callbacks=()):
-    optimizer = tf.optimizers.Adam()
-
-    @tf.function
-    def minimize():
-        optimizer.minimize(lambda: -target_log_prob_fn(*state), state)
-
-    state_trace, cb_trace = [], [[] for _ in callbacks]
-    for i in range(n_iter):
-        if i % save_every == 0:
-            state_trace.append(state)
-            for trace, cb in zip(cb_trace, callbacks):
-                trace.append(cb(state).numpy())
-        minimize()
-
-    return state_trace, cb_trace
-
-
-def get_best_map_state(map_trace, map_log_probs):
-    # map_log_probs[0/1]: train/test log probability
-    test_set_max_log_prob_idx = np.argmax(map_log_probs[1])
-    # Return MAP params that achieved highest test set likelihood.
-    return map_trace[test_set_max_log_prob_idx]
+    return burnin, samples
 
 
 def predict_from_chain(chain, model, x_test, uncertainty="aleatoric+epistemic", n_samples=1000):
@@ -190,6 +199,31 @@ def predict_from_chain(chain, model, x_test, uncertainty="aleatoric+epistemic", 
             y_var_tot = y_var_epist + y_var_aleat
             out.append(tf.stack((y_mean, y_var_tot), axis=-1))
         return out
+
+
+def get_map_trace(target_log_prob_fn, state, n_iter=1000, save_every=10, callbacks=()):
+    optimizer = tf.optimizers.Adam(1e-3)
+
+    @tf.function
+    def minimize():
+        optimizer.minimize(lambda: -target_log_prob_fn(*state), state)
+
+    state_trace, cb_trace = [], [[] for _ in callbacks]
+    for i in tqdm(range(n_iter)):
+        if i % save_every == 0:
+            state_trace.append(state)
+            for trace, cb in zip(cb_trace, callbacks):
+                trace.append(cb(state).numpy())
+        minimize()
+
+    return state_trace, cb_trace
+
+
+def get_best_map_state(map_trace, map_log_probs):
+    # map_log_probs[0/1]: train/test log probability
+    test_set_max_log_prob_idx = np.argmax(map_log_probs[1])
+    # Return MAP params that achieved highest test set likelihood.
+    return map_trace[test_set_max_log_prob_idx]
 
 
 def nest_concat(*args, axis=0):

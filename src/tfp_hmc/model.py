@@ -21,7 +21,7 @@ class GPPLayer(Layer):
         x = self.dense_gpp1(ev_inp)
         x = self.dense_gpp2(x)
         x_mean, x_log_var = tf.unstack(x, axis=-1)
-        x_var = tf.exp(x_log_var)
+        x_var = tf.exp(x_log_var) * apar
         x_mean = tf.exp(x_mean) * apar
         return tf.stack((x_mean, x_var), axis=-1)
 
@@ -62,7 +62,7 @@ class FluxModel(Model):
         for var, param in zip(self.trainable_weights, params):
             var.assign(param)
 
-    def call(self, inputs, training=None, mask=None):
+    def call(self, inputs, partitioning=False):
         gpp_dist = self.gpp_layer((inputs["APAR_input"], inputs["EV_input1"]))
         gpp_mean, gpp_var = tf.unstack(gpp_dist, axis=-1)
         reco_dist = self.reco_layer(inputs["EV_input2"])
@@ -71,6 +71,6 @@ class FluxModel(Model):
         nee_var = gpp_var + reco_var
         nee_dist = tf.stack((nee_mean, nee_var), axis=-1)
 
-        if not training:
+        if partitioning:
             return nee_dist, tf.stack((gpp_mean, nee_var), axis=-1), tf.stack((reco_mean, nee_var), axis=-1)
         return nee_dist

@@ -17,6 +17,7 @@ jupyterlab = "*"
 tqdm = "*"
 tensorflow-probability = "*"
 brokenaxes = "*"
+rpy2 = "*"
 
 [dev-packages]
 

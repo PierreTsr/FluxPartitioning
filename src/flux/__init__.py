@@ -1,9 +1,9 @@
 """
     __init__.py
-    Created by pierre
+    Created by Pierre Tessier
     4/26/22 - 10:04 AM
     Description:
-    # Enter file description
+    Set of tools for Flux Partitioning using neural networks.
  """
 import argparse
 

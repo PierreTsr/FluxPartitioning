@@ -1,3 +1,8 @@
+"""
+    Description:
+    Pre-processing functions for flux partitioning data.
+    Authors: Weiwei Zhan, Pierre Tessier
+ """
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -8,10 +13,18 @@ data_dir = Path("../data")
 
 def impose_noise(data_nn, SIFnoise_std=0.1, NEEnoise_std=0.08):
     """
-    add noise to NEE & SIF simulations
-    SIFnoise_std: standard deviation of the SIF Gaussian noises (std=0.1)
-    NEEnoise_std: we add a heteroscedastic noise that scales for NEE magnitude (8% of the NEE magnitude)
+    Add noise to NEE & SIF simulations.
+
+    :param data_nn: dataset containing the raw data
+    :type data_nn: pd.DataFrame
+    :param SIFnoise_std: standard deviation of the SIF Gaussian noises (std=0.1)
+    :type SIFnoise_std: float
+    :param NEEnoise_std: heteroscedastic noise that scales for NEE magnitude (8% of the NEE magnitude)
+    :type NEEnoise_std: float
+    :return: dataset with added noise, and dataset with daytime observations only
+    :rtype: (pd.DataFrame, pd.DataFrame)
     """
+
     std_SIF = SIFnoise_std
     std_NEE = NEEnoise_std * data_nn.NEE_canopy.abs()
 
@@ -34,7 +47,16 @@ def impose_noise(data_nn, SIFnoise_std=0.1, NEEnoise_std=0.08):
 
 
 def standard_x(x_train, x_test=None):
-    # the mean and std values are only calculated by training set
+    """
+    Data normalization (centering and variance normalization).
+
+    :param x_train: training data
+    :type x_train: np.ndarray
+    :param x_test: testing data
+    :type x_test: np.ndarray | None
+    :return: normalized data
+    :rtype: np.ndarray | (np.ndarray, np.ndarray)
+    """
     x_mean = x_train.mean(axis=0)
     x_std = x_train.std(axis=0)
     x_train1 = ((x_train - x_mean) / x_std).values
@@ -45,6 +67,18 @@ def standard_x(x_train, x_test=None):
 
 
 def load_dataset(filename, data_dir=data_dir):
+    """
+    Load a SCOPE simulation dataset and performs all the pre-processing steps.
+
+    It includes: data normalization, train/test/val split, inputs creation, transfer to default device.
+
+    :param filename: name of the file to use
+    :type filename: str
+    :param data_dir: path of the data directory
+    :type data_dir: str | Path
+    :return: split dataset and all required tensors
+    :rtype: tuple[pd.DataFrame | tf.Tensor]
+    """
     data_nn = pd.read_csv(Path(data_dir) / filename, index_col=0)
 
     data_nn.index = pd.to_datetime(data_nn.index)

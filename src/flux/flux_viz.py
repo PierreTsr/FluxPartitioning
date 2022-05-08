@@ -1,3 +1,8 @@
+"""
+    Description:
+    Visualizations functions for flux partitioning.
+    Authors: Weiwei Zhan, Pierre Tessier
+ """
 from datetime import datetime
 
 import matplotlib.pyplot as plt
@@ -5,11 +10,25 @@ from matplotlib.gridspec import GridSpec
 import pandas as pd
 import numpy as np
 from brokenaxes import brokenaxes
+from pathlib import Path
 from scipy import stats
 
 
 def diag_line(x, y, ax, color='black', xy=(.05, .76)):
-    # remove NAN values in x, y series
+    """
+    Add a dotted diagonal line to a plot.
+
+    :param x: x_values of the observations
+    :type x: pd.Series
+    :param y: y_values of the observations
+    :type y: pd.Series
+    :param ax: axes to plot the line on
+    :type ax: plt.Axes
+    :param color: color of the line
+    :type color: str
+    :param xy: annotations position
+    :type xy: (float, float)
+    """
     x, y = x.to_frame(), y.to_frame()
     x_y = pd.concat([x, y], axis=1)
 
@@ -33,6 +52,31 @@ def diag_line(x, y, ax, color='black', xy=(.05, .76)):
 
 
 def quad_viz(train_df, test_df, key, reference="canopy", filename=None, colors=None, bayesian=True, **kwargs):
+    """
+    Create a plot with two dataset results on top of each other (usually training and testing).
+
+    It can work with or without uncertainty visualization, MAP visualization and only plots a single variable (NEE, GPP
+    or Reco).
+
+    :param train_df: first dataset to use
+    :type train_df: pd.DataFrame
+    :param test_df: second dataset to use
+    :type test_df: pd.DataFrame
+    :param key: name of the variable to observe: "NEE" | "GPP" | "Reco"
+    :type key: str
+    :param reference: postfix of the target values
+    :type reference: str
+    :param filename: path to use to save the visuals (not saved if None is provided)
+    :type filename: str | Path | None
+    :param colors: name of a variable to use to color diagonal plots
+    :type colors: str
+    :param bayesian: if set to True, it will try to plot uncertainties and MAP
+    :type bayesian: bool
+    :param kwargs: additional parameters include `unit` (add a unit to axes), `postfix` (add a postfix to titles),
+    `data_break` (break the axis of the first data set at provided date)
+    :return: figure objects
+    :rtype: (plt.Figure, np.ndarray[plt.Axes])
+    """
     if bayesian:
         fig = plt.figure(figsize=(25, 10))
         gs = GridSpec(2, 3, width_ratios=[3, 1, 1], figure=fig)
@@ -168,6 +212,27 @@ def quad_viz(train_df, test_df, key, reference="canopy", filename=None, colors=N
 
 
 def dual_viz_val(val_df, key, reference="canopy", filename=None, colors=None, bayesian=True, **kwargs):
+    """
+    Same as previous function but for a single dataset (validation).
+
+    :param val_df: dataset to use
+    :type val_df: pd.DataFrame
+    :param key: name of the variable to observe: "NEE" | "GPP" | "Reco"
+    :type key: str
+    :param reference: postfix of the target values
+    :type reference: str
+    :param filename: path to use to save the visuals (not saved if None is provided)
+    :type filename: str | Path | None
+    :param colors: name of a variable to use to color diagonal plots
+    :type colors: str | None
+    :param bayesian: if set to True, it will try to plot uncertainties and MAP
+    :type bayesian: bool
+    :param kwargs: additional parameters include `unit` (add a unit to axes), `postfix` (add a postfix to titles),
+    `data_break` (break the axis of the first data set at provided date)
+    :return: figure objects
+    :rtype: (plt.Figure, np.ndarray[plt.Axes])
+    """
+
     if bayesian:
         fig, ax = plt.subplots(figsize=(25, 6), nrows=1, ncols=3, gridspec_kw={'width_ratios': [3, 1, 1]})
     else:

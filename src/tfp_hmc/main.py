@@ -21,7 +21,7 @@ from rpy2.robjects.conversion import localconverter
 from tensorflow import keras
 
 from flux.flux_preprocessing import load_dataset
-from flux.flux_viz import quad_viz
+from flux.flux_viz import quad_viz, dual_viz_val
 from tfp_hmc.hmc import tracer_factory, get_map_trace, target_log_prob_fn_factory, get_best_map_state, run_hmc, \
     predict_from_chain
 from tfp_hmc.model import FluxModel
@@ -43,14 +43,14 @@ def main(argv=None):
     EV1_val1, EV2_val1, NEE_val1, label_val, NEE_max_abs = load_dataset('NNinput_SCOPE_US_Ha1_1314.csv')
 
     hidden_dim = 32
-    map_train_steps = 3000
-    n_iter = 100000
-    burn_in = 10000
-    n_samples = 1000
-    leapfrog_steps = 50
+    map_train_steps = 10000
+    n_iter = 500000
+    burn_in = 50000
+    n_samples = 5000
+    leapfrog_steps = 200
     seq_len = 400
-    step_size = 2e-4
-    sampler = "nuts"
+    step_size = 5e-7
+    sampler = "hmc"
     sample_step = 5
     step_size_adapter = "none"
     param_std = 0.6
@@ -96,6 +96,10 @@ def main(argv=None):
     )
     nee_map_test, gpp_map_test, reco_map_test = model(
         {'APAR_input': label_test, 'EV_input1': EV1_test1, 'EV_input2': EV2_test1},
+        partitioning=True
+    )
+    nee_map_val, gpp_map_val, reco_map_val = model(
+        {'APAR_input': label_val, 'EV_input1': EV1_val1, 'EV_input2': EV2_val1},
         partitioning=True
     )
 
@@ -194,30 +198,64 @@ def main(argv=None):
     test["Reco_MAP"] = tf.unstack(reco_map_test, axis=-1)[0] * NEE_max_abs
     test["Reco_sigma"] = tf.sqrt(tf.unstack(reco_dist, axis=-1)[1]) * NEE_max_abs
 
+    nee_dist, gpp_dist, reco_dist = predict_from_chain(samples1, model,
+                                                       {'APAR_input': label_val, 'EV_input1': EV1_val1,
+                                                        'EV_input2': EV2_val1}, n_samples=n_samples)
+    val["NEE_mean"] = tf.unstack(nee_dist, axis=-1)[0] * NEE_max_abs
+    val["NEE_MAP"] = tf.unstack(nee_map_val, axis=-1)[0] * NEE_max_abs
+    val["NEE_sigma"] = tf.sqrt(tf.unstack(nee_dist, axis=-1)[1]) * NEE_max_abs
+    val["GPP_mean"] = tf.unstack(gpp_dist, axis=-1)[0] * NEE_max_abs
+    val["GPP_MAP"] = tf.unstack(gpp_map_val, axis=-1)[0] * NEE_max_abs
+    val["GPP_sigma"] = tf.sqrt(tf.unstack(gpp_dist, axis=-1)[1]) * NEE_max_abs
+    val["Reco_mean"] = tf.unstack(reco_dist, axis=-1)[0] * NEE_max_abs
+    val["Reco_MAP"] = tf.unstack(reco_map_val, axis=-1)[0] * NEE_max_abs
+    val["Reco_sigma"] = tf.sqrt(tf.unstack(reco_dist, axis=-1)[1]) * NEE_max_abs
+
     train_day = train.loc[train.APAR_label == 1,]
     train_night = train.loc[train.APAR_label == 0,]
     test_day = test.loc[test.APAR_label == 1,]
     test_night = test.loc[test.APAR_label == 0,]
 
-    fig, ax = quad_viz(train, test, "NEE", date_break=datetime(2014, 1, 1), filename=experiment_dir / "nee.png")
+    fig, ax = quad_viz(train, test, "NEE", date_break=datetime(2014, 1, 1),
+                       unit="(umol m-2 s-1)", filename=experiment_dir / "nee.png")
     # plt.show()
-    fig, ax = quad_viz(train, test, "GPP", date_break=datetime(2014, 1, 1), filename=experiment_dir / "gpp.png")
+    fig, ax = quad_viz(train, test, "GPP", date_break=datetime(2014, 1, 1),
+                       unit="(umol m-2 s-1)", filename=experiment_dir / "gpp.png")
     # plt.show()
-    fig, ax = quad_viz(train, test, "Reco", date_break=datetime(2014, 1, 1), filename=experiment_dir / "reco.png")
+    fig, ax = quad_viz(train, test, "Reco", date_break=datetime(2014, 1, 1),
+                       colors="Tsoil", unit="(umol m-2 s-1)",
+                       filename=experiment_dir / "reco.png")
+    # plt.show()
+
+    fig, ax = dual_viz_val(val, "NEE", date_break=datetime(2014, 1, 1),
+                           unit="(umol m-2 s-1)", filename=experiment_dir / "nee_val.png")
+    # plt.show()
+    fig, ax = dual_viz_val(val, "GPP", date_break=datetime(2014, 1, 1),
+                           unit="(umol m-2 s-1)", filename=experiment_dir / "gpp_val.png")
+    # plt.show()
+    fig, ax = dual_viz_val(val, "Reco", date_break=datetime(2014, 1, 1),
+                           colors="Tsoil", unit="(umol m-2 s-1)",
+                           filename=experiment_dir / "reco_val.png")
     # plt.show()
 
     fig, ax = quad_viz(train_day, test_day, "NEE", date_break=datetime(2014, 1, 1),
+                       unit="(umol m-2 s-1)",
                        filename=experiment_dir / "nee_day.png", postfix="Daytime")
     fig, ax = quad_viz(train_day, test_day, "GPP", date_break=datetime(2014, 1, 1),
+                       unit="(umol m-2 s-1)",
                        filename=experiment_dir / "gpp_day.png", postfix="Daytime")
     fig, ax = quad_viz(train_day, test_day, "Reco", date_break=datetime(2014, 1, 1),
+                       colors="Tsoil", unit="(umol m-2 s-1)",
                        filename=experiment_dir / "reco_day.png", postfix="Daytime")
 
     fig, ax = quad_viz(train_night, test_night, "NEE", date_break=datetime(2014, 1, 1),
+                       unit="(umol m-2 s-1)",
                        filename=experiment_dir / "nee_night.png", postfix="Nighttime")
     fig, ax = quad_viz(train_night, test_night, "GPP", date_break=datetime(2014, 1, 1),
+                       unit="(umol m-2 s-1)",
                        filename=experiment_dir / "gpp_night.png", postfix="Nighttime")
     fig, ax = quad_viz(train_night, test_night, "Reco", date_break=datetime(2014, 1, 1),
+                       colors="Tsoil", unit="(umol m-2 s-1)",
                        filename=experiment_dir / "reco_night.png", postfix="Nighttime")
 
     # ======================

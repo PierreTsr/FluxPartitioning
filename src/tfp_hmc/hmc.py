@@ -112,7 +112,7 @@ def trace_fn(current_state, kernel_results, summary_freq=10, callbacks=()):
     """
     # step = kernel_results.step
     # with tf.summary.record_if(tf.equal(step % summary_freq, 0)):
-    return kernel_results, [cb(*current_state) for cb in callbacks]
+    return kernel_results.is_accepted, [cb(*current_state) for cb in callbacks]
 
 
 @tf.function(experimental_compile=True)
@@ -154,18 +154,18 @@ def sample_chain_sequentially(num_results, sequence_len, current_state, prev_ker
             chain, trace, final_kernel_results = sample_chain(*args, num_results=n, current_state=current_state, previous_kernel_results=prev_kernel_results, **kwargs)
             prev_kernel_results = final_kernel_results
             current_state = tf.nest.map_structure(lambda c: c[-1], chain)
-            try:
-                acceptance = trace[0].inner_results.is_accepted.numpy().mean()
-            except AttributeError:
-                acceptance = trace[0].is_accepted.numpy().mean()
-            pbar.set_postfix_str("acceptance rate: {r:.2f}".format(r=acceptance))
-            pbar.update(n)
             if total_chain is None:
                 total_trace = trace
                 total_chain = chain
             else:
                 total_trace = nest_concat(total_trace, trace)
                 total_chain = nest_concat(total_chain, chain)
+            try:
+                acceptance = total_trace[0].numpy().mean()
+            except AttributeError:
+                acceptance = total_trace[0].is_accepted.numpy().mean()
+            pbar.set_postfix_str("acceptance rate: {r:.2f}".format(r=acceptance))
+            pbar.update(n)
     return total_chain, total_trace, final_kernel_results
 
 
@@ -310,12 +310,11 @@ def predict_from_chain(chain, model, x_test, uncertainty="aleatoric+epistemic", 
             pred = model(x_test, partitioning=True)
             return pred
 
-        preds = [predict(params) for params in restructured_chain]
+        samples = np.random.choice(len(restructured_chain), (n_samples,), replace=True)
+        preds = [predict(restructured_chain[idx]) for idx in samples]
         restructured_preds = [[pred[i] for pred in preds] for i in range(len(preds[0]))]
         out = []
-        samples = np.random.choice(len(preds), (n_samples,), replace=False)
         for preds in restructured_preds:
-            preds = tf.gather(preds, samples, axis=0)
             y_mean_mc_samples, y_var_mc_samples = tf.unstack(preds, axis=-1)
             y_mean, y_var_epist = tf.nn.moments(y_mean_mc_samples, axes=0)
             y_var_aleat = tf.reduce_mean(y_var_mc_samples, axis=0)
@@ -351,7 +350,7 @@ def get_map_trace(target_log_prob_fn, state, n_iter=1000, save_every=10, callbac
         if i % save_every == 0:
             state_trace.append(state)
             for trace, cb in zip(cb_trace, callbacks):
-                trace.append(cb(state).numpy())
+                trace.append(cb(*state).numpy())
         minimize()
 
     return state_trace, cb_trace

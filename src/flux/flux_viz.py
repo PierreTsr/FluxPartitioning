@@ -207,7 +207,6 @@ def quad_viz(train_df, test_df, key, reference="canopy", filename=None, colors=N
     plt.rcParams['savefig.dpi'] = 220
     if filename is not None:
         fig.savefig(filename)
-    # plt.show()
     return fig, ax
 
 
@@ -300,5 +299,4 @@ def dual_viz_val(val_df, key, reference="canopy", filename=None, colors=None, ba
     plt.rcParams['savefig.dpi'] = 220
     if filename is not None:
         fig.savefig(filename)
-    plt.show()
     return fig, ax

@@ -12,13 +12,10 @@ from math import ceil
 from pathlib import Path
 
 import numpy as np
-import rpy2.robjects as robjects
+import pyreadr
 import tensorflow as tf
 import tensorflow_probability as tfp
 from matplotlib import pyplot as plt
-from rpy2.robjects import default_converter
-from rpy2.robjects import numpy2ri
-from rpy2.robjects.conversion import localconverter
 from tensorflow import keras
 
 from flux.flux_preprocessing import load_dataset
@@ -342,12 +339,8 @@ def main(argv=None):
     np.save(str(experiment_dir / "full_parameters.npy"), full_parameters)
     np.save(str(experiment_dir / "map_parameters.npy"), best_map_params_flat)
 
-    np_cv_rules = default_converter + numpy2ri.converter
-    r_save = robjects.r["saveRDS"]
-    with localconverter(np_cv_rules) as cv:
-        parameters_r = cv.py2rpy(full_parameters.astype(np.float64))
-        r_save(parameters_r, str(Path("../etc/diagnostic/flux_nn") / "full_parameters.rds"))
-        r_save(parameters_r, str(experiment_dir / "full_parameters.rds"))
+    pyreadr.write_rds(str(Path("../etc/diagnostic/flux_nn") / "full_parameters.rds"), full_parameters)
+    pyreadr.write_rds(str(experiment_dir / "full_parameters.rds"), full_parameters)
 
     os.system("Rscript -e 'library(rmarkdown); rmarkdown::render(\"diagnostic.rmd\", \"html_document\")'")
     os.system("html2pdf diagnostic.html diagnostic.pdf")

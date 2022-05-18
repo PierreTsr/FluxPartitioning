@@ -24,6 +24,8 @@ This project uses Python 3.9. Setting up the python environment can be done conv
 python3.9 -m pip install pipenv
 python3.9 -m pipenv install
 python3.9 -m pipenv shell
+cd src/
+export PYTHONPATH=$PYTHONPATH:$(pwd)
 ```
 
 The SCOPE dataset to use needs to be placed in `data/` (the code is using the file `NNinput_SCOPE_US_Ha1_1314.csv` by default, which needs to be downloaded separately)

@@ -3,8 +3,9 @@
     Created by pierre
     4/22/22 - 11:30 AM
     Description:
-    # Enter file description
+    Flux partitioning with uncertainty estimation using HMC or NUTS.
  """
+import argparse
 import os
 from datetime import datetime
 from math import ceil
@@ -28,49 +29,73 @@ from tfp_hmc.model import FluxModel
 
 tfd = tfp.distributions
 
-
-def subsample(chain, step):
-    sampled_chain = [param[::step, ...] for param in chain]
-    return sampled_chain
+script = True
 
 
 def main(argv=None):
-    # parser = argparse.ArgumentParser()
-    # args = parser.parse_args(argv)
+    parser = argparse.ArgumentParser(
+        description="Runs 4 similar HMC chains for flux partitioning and produces all the experiment visualizations and diagnostics.")
+    parser.add_argument("-n", type=int, default=10000, help="number of samples to produce")
+    parser.add_argument("-b", type=int, default=1000, help="number of burn-in steps before sampling")
+    parser.add_argument("-L", type=int, default=100, help="number of leapfrog steps")
+    parser.add_argument("-e", type=float, default=1e-4, help="epsilon - step size for leapfrog integration")
+    parser.add_argument("-s", type=str, choices=("hmc", "nuts"), default="nuts", help="type of sampler")
+    parser.add_argument("--hidden", type=int, default=32, help="hidden layer dimension")
+    parser.add_argument("--sub", type=int, default=1, help="sub-sampling period")
+
+    args = parser.parse_args(argv)
 
     print("Loading data...")
     train, test, val, EV1_train1, EV2_train1, NEE_train1, label_train, EV1_test1, EV2_test1, NEE_test1, label_test, \
     EV1_val1, EV2_val1, NEE_val1, label_val, NEE_max_abs = load_dataset('NNinput_SCOPE_US_Ha1_1314.csv')
 
-    hidden_dim = 32
+    # ====================== PARAMETERS DEFINITION ======================
+    hidden_dim = 12
     map_train_steps = 10000
-    n_iter = 500000
-    burn_in = 50000
-    n_samples = 5000
-    leapfrog_steps = 200
-    seq_len = 400
-    step_size = 5e-7
-    sampler = "hmc"
-    sample_step = 5
+    n_iter = 5000
+    burn_in = 1000
+    leapfrog_steps = 1000
+    seq_len = 10
+    step_size = 3e-4
+    sampler = "nuts"
+    sample_step = 400
     step_size_adapter = "none"
-    param_std = 0.6
+    param_std = 1
+    parallel_iterations = 100
+
+    # Override hard-coded value with script arguments
+    if script:
+        hidden_dim = args.hidden
+        map_train_steps = 10000
+        n_iter = args.n
+        burn_in = args.b
+        leapfrog_steps = args.L
+        seq_len = 100
+        step_size = args.e
+        sampler = args.s
+        sample_step = args.sub
+        step_size_adapter = "none"
+        param_std = 0.5
+    # ====================== END PARAMETERS DEFINITION ======================
+
     param_prior = tfd.Normal(0, param_std)
     # param_prior = tfd.Cauchy(0, 0.2)
-    if sample_step is not None:
-        n_subsamples = int(ceil(n_iter / sample_step))
-    else:
-        n_subsamples = n_iter
+    n_samples = min(2000, n_iter)
 
     # ======================
     print("Building model...")
     model = FluxModel(hidden_dim=hidden_dim)
     model.compile(optimizer=keras.optimizers.RMSprop(1e-3), )
     model({'APAR_input': label_train, 'EV_input1': EV1_train1, 'EV_input2': EV2_train1})
+    print(model.summary())
 
     log_prob_tracers = (
-        tracer_factory(model, {'APAR_input': label_train, 'EV_input1': EV1_train1, 'EV_input2': EV2_train1},
-                       NEE_train1),
-        tracer_factory(model, {'APAR_input': label_test, 'EV_input1': EV1_test1, 'EV_input2': EV2_test1}, NEE_test1),
+        target_log_prob_fn_factory(param_prior, model,
+                                   {'APAR_input': label_train, 'EV_input1': EV1_train1, 'EV_input2': EV2_train1},
+                                   NEE_train1),
+        target_log_prob_fn_factory(param_prior, model,
+                                   {'APAR_input': label_test, 'EV_input1': EV1_test1, 'EV_input2': EV2_test1},
+                                   NEE_test1),
     )
 
     init_state = model.trainable_weights
@@ -111,15 +136,15 @@ def main(argv=None):
 
     if sampler == "hmc":
         experiment_dir = Path("../etc/tfp") / (
-            f"{sampler}_{step_size_adapter}_n-{n_iter}_burn-in-{burn_in}_eps-{step_size}_L-{leapfrog_steps}_sub-{sample_step}"
+            f"{sampler}_{step_size_adapter}_n-{n_iter*sample_step}_burn-in-{burn_in}_eps-{step_size}_L-{leapfrog_steps}_sub-{sample_step}"
         ) / (
-                             f"prior-{param_std}"
+                             f"prior-{param_std}_hidden-{hidden_dim}"
                          )
     else:
         experiment_dir = Path("../etc/tfp") / (
-            f"{sampler}_{step_size_adapter}_n-{n_iter}_burn-in-{burn_in}_eps-{step_size}_sub-{sample_step}"
+            f"{sampler}_{step_size_adapter}_n-{n_iter*sample_step}_burn-in-{burn_in}_eps-{step_size}_sub-{sample_step}"
         ) / (
-                             f"prior-{param_std}"
+                             f"prior-{param_std}_hidden-{hidden_dim}"
                          )
     experiment_dir.mkdir(exist_ok=True, parents=True)
     log_dir = Path("../etc/tfp/logs") / experiment_dir.stem
@@ -135,12 +160,12 @@ def main(argv=None):
         seq_len=seq_len,
         step_size_adapter=step_size_adapter,
         log_dir=log_dir,
+        num_steps_between_results=sample_step,
+        parallel_iterations=parallel_iterations,
     )
-    if sample_step is not None:
-        samples1 = subsample(samples1, sample_step)
 
     # plot parameters spread
-    parameters = np.concatenate([np.reshape(param.numpy(), (n_subsamples, -1)) for param in samples1], 1)
+    parameters = np.concatenate([np.reshape(param.numpy(), (n_iter, -1)) for param in samples1], 1)
     fig, axs = plt.subplots(5, 5, figsize=(20, 15))
     for i in range(axs.shape[0]):
         axs[i, i].hist(parameters[:, i], bins=30, density=True)
@@ -155,7 +180,7 @@ def main(argv=None):
     # plot parameters auto-correlation
     fig, axs = plt.subplots(4, 4, figsize=(12, 10))
     axs = axs.flatten()
-    max_lag = int(n_subsamples / 4)
+    max_lag = int(n_iter / 4)
     for k in range(len(axs)):
         i = np.random.randint(0, parameters.shape[1])
         auto_cor = []
@@ -270,10 +295,10 @@ def main(argv=None):
         sampler=sampler,
         seq_len=seq_len,
         step_size_adapter=step_size_adapter,
-        log_dir=log_dir
+        log_dir=log_dir,
+        num_steps_between_results=sample_step,
+        parallel_iterations=parallel_iterations,
     )
-    if sample_step is not None:
-        samples2 = subsample(samples2, sample_step)
 
     _, samples3, _, _ = run_hmc(
         target_log_prob_fn,
@@ -285,10 +310,10 @@ def main(argv=None):
         sampler=sampler,
         seq_len=seq_len,
         step_size_adapter=step_size_adapter,
-        log_dir=log_dir
+        log_dir=log_dir,
+        num_steps_between_results=sample_step,
+        parallel_iterations=parallel_iterations,
     )
-    if sample_step is not None:
-        samples3 = subsample(samples3, sample_step)
 
     _, samples4, _, _ = run_hmc(
         target_log_prob_fn,
@@ -300,18 +325,18 @@ def main(argv=None):
         sampler=sampler,
         seq_len=seq_len,
         step_size_adapter=step_size_adapter,
-        log_dir=log_dir
+        log_dir=log_dir,
+        num_steps_between_results=sample_step,
+        parallel_iterations=parallel_iterations,
     )
-    if sample_step is not None:
-        samples4 = subsample(samples4, sample_step)
 
     # ======================
     print("Saving experiment results...")
     best_map_params_flat = np.concatenate([np.reshape(param, (-1,)) for param in best_map_params])
-    parameters2 = tf.concat([tf.reshape(param.numpy(), (n_subsamples, -1)) for param in samples2], 1)
-    parameters3 = tf.concat([tf.reshape(param.numpy(), (n_subsamples, -1)) for param in samples3], 1)
-    parameters4 = tf.concat([tf.reshape(param.numpy(), (n_subsamples, -1)) for param in samples4], 1)
-    full_parameters = np.stack([parameters, parameters2, parameters3, parameters4], axis=2).astype(np.float64)
+    parameters2 = tf.concat([tf.reshape(param.numpy(), (n_iter, -1)) for param in samples2], 1)
+    parameters3 = tf.concat([tf.reshape(param.numpy(), (n_iter, -1)) for param in samples3], 1)
+    parameters4 = tf.concat([tf.reshape(param.numpy(), (n_iter, -1)) for param in samples4], 1)
+    full_parameters = np.stack([parameters, parameters2, parameters3, parameters4], axis=2)
 
     np.save(str(Path("../etc/diagnostic/flux_nn") / "full_parameters.npy"), full_parameters)
     np.save(str(experiment_dir / "full_parameters.npy"), full_parameters)
@@ -320,7 +345,7 @@ def main(argv=None):
     np_cv_rules = default_converter + numpy2ri.converter
     r_save = robjects.r["saveRDS"]
     with localconverter(np_cv_rules) as cv:
-        parameters_r = cv.py2rpy(full_parameters)
+        parameters_r = cv.py2rpy(full_parameters.astype(np.float64))
         r_save(parameters_r, str(Path("../etc/diagnostic/flux_nn") / "full_parameters.rds"))
         r_save(parameters_r, str(experiment_dir / "full_parameters.rds"))
 

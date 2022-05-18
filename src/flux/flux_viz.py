@@ -119,10 +119,10 @@ def quad_viz(train_df, test_df, key, reference="canopy", filename=None, colors=N
     sigma = key + "_sigma"
     nn = key + "_NN"
 
-    ax[0, 0].scatter(train_df.index, train_df[ref], label=ref, s=s_circle)
+    ax[0, 0].plot(train_df.index, train_df[ref], label=ref)
     if bayesian:
-        ax[0, 0].scatter(train_df.index, train_df[map], label=map, s=s_circle, alpha=0.6)
-        ax[0, 0].scatter(train_df.index, train_df[mean], label=mean, s=s_circle, alpha=0.6)
+        ax[0, 0].plot(train_df.index, train_df[map], label=map, alpha=0.6)
+        ax[0, 0].plot(train_df.index, train_df[mean], label=mean, alpha=0.6)
         lower = train_df[mean] - 2 * train_df[sigma]
         upper = train_df[mean] + 2 * train_df[sigma]
         where = [True] * train_df.shape[0]
@@ -130,21 +130,21 @@ def quad_viz(train_df, test_df, key, reference="canopy", filename=None, colors=N
         ax[0, 0].fill_between(train_df.index, lower, upper, where=where, facecolor="red", alpha=0.5,
                               label="Two std band")
     else:
-        ax[0, 0].scatter(train_df.index, train_df[nn], label=nn, s=s_circle, alpha=0.6)
+        ax[0, 0].plot(train_df.index, train_df[nn], label=nn, alpha=0.6)
     ax[0, 0].set_ylabel(key)
     ax[0, 0].set_title(train_title, fontsize=14, fontweight='bold')
 
-    ax[1, 0].scatter(test_df.index, test_df[ref], label=ref, s=s_circle)
+    ax[1, 0].plot(test_df.index, test_df[ref], label=ref)
     if bayesian:
-        ax[1, 0].scatter(test_df.index, test_df[map], label=map, s=s_circle, alpha=0.6)
-        ax[1, 0].scatter(test_df.index, test_df[mean], label=mean, s=s_circle, alpha=0.6)
+        ax[1, 0].plot(test_df.index, test_df[map], label=map, alpha=0.6)
+        ax[1, 0].plot(test_df.index, test_df[mean], label=mean, alpha=0.6)
         lower = test_df[mean] - 2 * test_df[sigma]
         upper = test_df[mean] + 2 * test_df[sigma]
         where = [True] * train_df.shape[0]
         where[(train_df.index < datetime(2014, 1, 1)).sum() - 1] = False
         ax[1, 0].fill_between(test_df.index, lower, upper, facecolor="red", alpha=0.5, label="Two std band")
     else:
-        ax[1, 0].scatter(test_df.index, test_df[nn], label=nn, s=s_circle, alpha=0.6)
+        ax[1, 0].plot(test_df.index, test_df[nn], label=nn, alpha=0.6)
     ax[1, 0].set_ylabel(key)
     ax[1, 0].set_title(test_title, fontsize=14, fontweight='bold')
 
@@ -247,10 +247,10 @@ def dual_viz_val(val_df, key, reference="canopy", filename=None, colors=None, ba
     sigma = key + "_sigma"
     nn = key + "_NN"
 
-    ax[0].scatter(val_df.index, val_df[ref], label=ref, s=s_circle)
+    ax[0].plot(val_df.index, val_df[ref], label=ref)
     if bayesian:
-        ax[0].scatter(val_df.index, val_df[map], label=map, s=s_circle, alpha=0.6)
-        ax[0].scatter(val_df.index, val_df[mean], label=mean, s=s_circle, alpha=0.6)
+        ax[0].plot(val_df.index, val_df[map], label=map, alpha=0.6)
+        ax[0].plot(val_df.index, val_df[mean], label=mean, alpha=0.6)
         lower = val_df[mean] - 2 * val_df[sigma]
         upper = val_df[mean] + 2 * val_df[sigma]
         where = [True] * val_df.shape[0]
@@ -258,7 +258,7 @@ def dual_viz_val(val_df, key, reference="canopy", filename=None, colors=None, ba
         ax[0].fill_between(val_df.index, lower, upper, where=where, facecolor="red", alpha=0.5,
                            label="Two std band")
     else:
-        ax[0].scatter(val_df.index, val_df[nn], label=nn, s=s_circle, alpha=0.6)
+        ax[0].plot(val_df.index, val_df[nn], label=nn, alpha=0.6)
     ax[0].set_ylabel(key)
     ax[0].set_title('Validation Set', fontsize=14, fontweight='bold')
     ax[1].set_title('Validation set', fontsize=14, fontweight='bold')

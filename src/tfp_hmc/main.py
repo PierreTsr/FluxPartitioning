@@ -8,11 +8,9 @@
 import argparse
 import os
 from datetime import datetime
-from math import ceil
 from pathlib import Path
 
 import numpy as np
-import pyreadr
 import tensorflow as tf
 import tensorflow_probability as tfp
 from matplotlib import pyplot as plt
@@ -20,7 +18,7 @@ from tensorflow import keras
 
 from flux.flux_preprocessing import load_dataset
 from flux.flux_viz import quad_viz, dual_viz_val
-from tfp_hmc.hmc import tracer_factory, get_map_trace, target_log_prob_fn_factory, get_best_map_state, run_hmc, \
+from tfp_hmc.hmc import get_map_trace, target_log_prob_fn_factory, get_best_map_state, run_hmc, \
     predict_from_chain
 from tfp_hmc.model import FluxModel
 
@@ -339,13 +337,8 @@ def main(argv=None):
     np.save(str(experiment_dir / "full_parameters.npy"), full_parameters)
     np.save(str(experiment_dir / "map_parameters.npy"), best_map_params_flat)
 
-    pyreadr.write_rds(str(Path("../etc/diagnostic/flux_nn") / "full_parameters.rds"), full_parameters)
-    pyreadr.write_rds(str(experiment_dir / "full_parameters.rds"), full_parameters)
-
     os.system("Rscript -e 'library(rmarkdown); rmarkdown::render(\"diagnostic.rmd\", \"html_document\")'")
-    os.system("html2pdf diagnostic.html diagnostic.pdf")
-    os.remove("diagnostic.html")
-    os.rename("diagnostic.pdf", experiment_dir / "diagnostic.pdf")
+    os.rename("diagnostic.html", experiment_dir / "diagnostic.html")
 
 
 if __name__ == "__main__":

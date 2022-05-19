@@ -9,12 +9,13 @@ This notebook runs a few statistical diagnostics on the logged variables of an H
 - `log_lambda.npy`
 - `parameter*.npy`
 ```{r}
-library(RcppCNPy)
+library(reticulate)
+np <- import("numpy")
 library(coda)
 library(ggplot2)
 
-params <- "../etc/diagnostic/flux_nn/full_parameters.rds"
-params <- readRDS(params)
+params <- "../etc/diagnostic/flux_nn/full_parameters.npy"
+params <- np$load(params)
 all_chains <- apply(apply(params, c(2, 3), function(col) {mcmc(col)}, simplify = FALSE), 1, function(col) {mcmc.list(col)}, simplify = FALSE)
 ```
 # Geweke Z-score
